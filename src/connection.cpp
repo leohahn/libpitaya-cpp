@@ -107,7 +107,9 @@ Connection::SendHandshake()
 
     // TODO: consider making a packet just a simple byte arreay instead
     // of a struct. This will avoid unnecessary copies like the one below.
-    auto handshakePacket = protocol::NewHandshake();
+    auto handshakePacket = protocol::NewHandshake(
+        "{\"sys\": {\"platform\": \"mac\", \"libVersion\": \"0.3.5-release\", "
+        "\"clientBuildNumber\": \"20\", \"clientVersion\": \"2.1\"}, \"user\": {}}");
     std::vector<uint8_t> handshakeBuf;
     handshakePacket.SerializeInto(handshakeBuf);
 
@@ -126,6 +128,8 @@ Connection::ReceiveHandshakeResponse()
 {
     assert(std::this_thread::get_id() == _workerThreadId);
 
+    std::cout << "Will receive handshake response\n";
+
     _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
         if (ec) {
             this->_eventListeners.Broadcast(Event::ConnectionFailed, ec.message());
@@ -134,6 +138,8 @@ Connection::ReceiveHandshakeResponse()
 
         assert(packets.size() > 0 &&
                "If no error was returned, packets should be at least of size 1");
+
+        std::cout << "Received response from server\n";
 
         if (packets.size() > 1) {
             // TODO: consider calling a reconnect function here.
@@ -146,6 +152,36 @@ Connection::ReceiveHandshakeResponse()
 
             return;
         }
+
+        const auto& packet = packets[0];
+
+        if (packet.type != protocol::PacketType::Handshake) {
+            this->_eventListeners.Broadcast(
+                Event::ConnectionFailed,
+                "Did not get a hanshake response from the server, closing connection\n");
+            return;
+        }
+
+        // TODO: parse handshake response into a JSON object and store it in the connection state.
+        std::cout << "Response is: " << string((char*)packet.body.data(), packet.body.size())
+                  << "\n";
+
+        // TODO: Send handshake ack
+        SendHandshakeAck();
+    });
+}
+
+void
+Connection::SendHandshakeAck()
+{
+    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [](error_code ec) {
+        if (ec) {
+            std::cerr << "Failed to send hanshake ack\n";
+            return;
+        }
+
+        std::cout << "Sent handshake ack successfuly\n";
+        // TODO: Start heartbeat timer.
     });
 }
 

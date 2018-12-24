@@ -25,6 +25,7 @@ TcpPacketFramed::TcpPacketFramed(std::shared_ptr<boost::asio::io_context> ioCont
     , _socket(*_ioContext)
     , _writeId(0)
     , _readBufferMaxSize(readBufferMaxSize)
+    , _readBufferHead(0)
 {
     _readBuffer.resize(_readBufferMaxSize(), 0);
     std::cout << "TCP Packet Framed created\n";
@@ -59,7 +60,7 @@ TcpPacketFramed::SendPacket(protocol::Packet packet, SendHandler handler)
 {
     if (_packetSendQueue.size() < kMaxQueuedPackets) {
         _packetSendQueue.push_back(std::move(packet));
-        _ioContext->post([this]() { this->SendNextPacket(); });
+        _ioContext->post([this, h = std::move(handler)]() { this->SendNextPacket(h); });
     } else {
         std::cout << "Ignoring packet, since queue is already full\n";
     }
@@ -75,8 +76,8 @@ void
 TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
 {
     void* bufferStart =
-        reinterpret_cast<void*>(reinterpret_cast<char*>(&_readBuffer[0]) + _readBuffer.size());
-    size_t bufferSize = _readBufferMaxSize() - _readBuffer.size();
+        reinterpret_cast<void*>(reinterpret_cast<char*>(&_readBuffer[0]) + _readBufferHead);
+    size_t bufferSize = _readBuffer.size() - _readBufferHead;
 
     _socket.async_receive(
         asio::buffer(bufferStart, bufferSize), [this, handler](error_code ec, size_t bytesRead) {
@@ -90,14 +91,18 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
             }
 
             assert(bytesRead > 0);
+            _readBufferHead += bytesRead;
+            assert(_readBufferHead <= _readBuffer.size());
 
             try {
-                auto packets = this->ParsePacketsFromBuffer(_readBuffer);
+                auto packets = this->ParsePacketsFromReadBuffer();
+
+                std::cout << "Parsed " << packets.size() << " packets\n";
 
                 if (packets.size() == 0) {
                     this->ReadToBuffer(handler);
                 } else {
-                    handler(ec, std::move(packets));
+                    handler(boost_errc::make_error_code(boost_errc::success), std::move(packets));
                 }
             } catch (const pitaya::Exception& exc) {
                 std::cerr << "Parsing server packets failed: " << exc.what() << "\n";
@@ -107,7 +112,7 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
 }
 
 void
-TcpPacketFramed::SendNextPacket()
+TcpPacketFramed::SendNextPacket(SendHandler handler)
 {
     assert(!_packetSendQueue.empty());
 
@@ -123,15 +128,18 @@ TcpPacketFramed::SendNextPacket()
     pkt.SerializeInto(buf);
 
     // Send buffer asynchronously
-    _socket.async_send(asio::buffer(buf), [this, id](error_code ec, size_t nwritten) {
-        if (ec) {
-            std::cerr << "Failed to send buffer to server: " << ec.message() << "\n";
-            return;
-        }
+    _socket.async_send(
+        asio::buffer(buf), [this, id, h = std::move(handler)](error_code ec, size_t nwritten) {
+            if (ec) {
+                std::cerr << "Failed to send buffer to server: " << ec.message() << "\n";
+                h(ec);
+                return;
+            }
 
-        std::cout << "Successfuly sent packet id " << id << "\n";
-        this->_writeBuffers.erase(id);
-    });
+            std::cout << "Successfuly sent packet id " << id << "\n";
+            h(boost_errc::make_error_code(boost_errc::success));
+            this->_writeBuffers.erase(id);
+        });
 
     // Put the buffer into the write set.
     assert(_writeBuffers.find(_writeId) == _writeBuffers.end());
@@ -139,43 +147,52 @@ TcpPacketFramed::SendNextPacket()
 }
 
 vector<protocol::Packet>
-TcpPacketFramed::ParsePacketsFromBuffer(vector<uint8_t>& buf)
+TcpPacketFramed::ParsePacketsFromReadBuffer()
 {
+    // When this function is called, _readBufferHead points to the first
+    // position that does not contain a valid byte.
     size_t packetStartOffset = 0;
 
     vector<protocol::Packet> packets;
 
+    const size_t bufferSize = _readBufferHead;
+
     for (;;) {
-        size_t sizeLeft = buf.size() - packetStartOffset;
+        size_t sizeLeft = bufferSize - packetStartOffset;
 
         if (sizeLeft < protocol::kPacketHeaderSize) {
-            std::rotate(buf.begin(), buf.begin() + packetStartOffset, buf.end());
-            buf.resize(sizeLeft);
+            std::rotate(
+                _readBuffer.begin(), _readBuffer.begin() + packetStartOffset, _readBuffer.end());
+            _readBufferHead = sizeLeft;
             return packets;
         }
 
+        assert(packetStartOffset < _readBuffer.size());
+
         // Get the type of the packet.
-        auto packetType = protocol::PacketTypeFromByte(buf[packetStartOffset]);
+        auto packetType = protocol::PacketTypeFromByte(_readBuffer[packetStartOffset]);
 
         if (!packetType) {
             throw pitaya::Exception("Received an invalid packet type from the server.");
         }
 
         // Read the length of the packet.
-        int length = (buf[packetStartOffset + 1] << 16) | (buf[packetStartOffset + 2] << 8) |
-                     (buf[packetStartOffset + 3]);
+        int length = (_readBuffer[packetStartOffset + 1] << 16) |
+                     (_readBuffer[packetStartOffset + 2] << 8) |
+                     (_readBuffer[packetStartOffset + 3]);
 
         if (sizeLeft < protocol::kPacketHeaderSize + length) {
-            std::rotate(buf.begin(), buf.begin() + packetStartOffset, buf.end());
-            buf.resize(sizeLeft);
+            std::rotate(
+                _readBuffer.begin(), _readBuffer.begin() + packetStartOffset, _readBuffer.end());
+            _readBufferHead = sizeLeft;
             return packets;
         }
 
         switch (packetType.value()) {
             case protocol::PacketType::Handshake:
-                assert(length == 0);
-                packets.push_back(protocol::NewHandshake());
-                packetStartOffset += protocol::kPacketHeaderSize;
+                packets.push_back(protocol::NewHandshake(
+                    _readBuffer.data() + packetStartOffset + protocol::kPacketHeaderSize, length));
+                packetStartOffset += protocol::kPacketHeaderSize + length;
                 break;
             case protocol::PacketType::Heartbeat:
                 assert(length == 0);
@@ -183,7 +200,7 @@ TcpPacketFramed::ParsePacketsFromBuffer(vector<uint8_t>& buf)
                 packetStartOffset += protocol::kPacketHeaderSize;
                 break;
             case protocol::PacketType::Data: {
-                uint8_t* dataStart = const_cast<uint8_t*>(buf.data()) + packetStartOffset +
+                uint8_t* dataStart = const_cast<uint8_t*>(_readBuffer.data()) + packetStartOffset +
                                      protocol::kPacketHeaderSize;
                 packets.push_back(protocol::NewData(dataStart, length));
                 packetStartOffset += protocol::kPacketHeaderSize + length;

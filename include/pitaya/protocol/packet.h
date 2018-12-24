@@ -2,6 +2,7 @@
 #define PITAYA_PROTOCOL_PACKET_H
 
 #include <boost/optional.hpp>
+#include <string>
 #include <vector>
 
 namespace pitaya {
@@ -34,16 +35,21 @@ public:
 };
 
 inline Packet
-NewHandshake()
+NewHandshake(const std::string& json)
 {
-    // TODO: Add real variables to this hardcoded string.
-    static const char data[] =
-        "{\"sys\": {\"platform\": \"mac\", \"libVersion\": \"0.3.5-release\", "
-        "\"clientBuildNumber\": \"20\", \"clientVersion\": \"2.1\"}, \"user\": {}}";
-
     Packet p;
     p.type = PacketType::Handshake;
-    p.body = std::vector<uint8_t>(data, data + sizeof(data));
+    p.body = std::vector<uint8_t>(json.data(), json.data() + json.size());
+    p.length = p.body.size();
+    return p;
+}
+
+inline Packet
+NewHandshake(uint8_t* data, size_t length)
+{
+    Packet p;
+    p.type = PacketType::Handshake;
+    p.body = std::vector<uint8_t>(data, data + length);
     p.length = p.body.size();
     return p;
 }

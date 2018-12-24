@@ -86,6 +86,7 @@ private:
     void SendHandshake();
     void HandshakeFailed(boost::system::error_code ec);
     void ReceiveHandshakeResponse();
+    void SendHandshakeAck();
 
 private:
     // The current state of the connection.

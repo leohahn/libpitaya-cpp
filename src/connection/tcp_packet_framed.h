@@ -41,9 +41,9 @@ public:
     TcpPacketFramed(const TcpPacketFramed&) = delete;
 
 private:
-    void SendNextPacket();
+    void SendNextPacket(SendHandler handler);
     void ReadToBuffer(ReceiveHandler handler);
-    std::vector<protocol::Packet> ParsePacketsFromBuffer(std::vector<uint8_t>& buf);
+    std::vector<protocol::Packet> ParsePacketsFromReadBuffer();
 
 private:
     std::shared_ptr<boost::asio::io_context> _ioContext;
@@ -54,6 +54,7 @@ private:
     uint32_t _writeId;
 
     ReadBufferMaxSize _readBufferMaxSize;
+    size_t _readBufferHead;
     std::vector<uint8_t> _readBuffer;
     std::vector<uint8_t> _incompletePacketBuffer;
 };
