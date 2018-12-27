@@ -23,6 +23,8 @@ add_library(pitaya_cpp
     include/pitaya/connection.h
     src/connection.cpp
     src/utils/net.h
+    include/pitaya/connection/state.h
+    src/connection/state.cpp
     # Connection
     include/pitaya/connection/packet_framed.h
     src/connection/tcp_packet_framed.cpp

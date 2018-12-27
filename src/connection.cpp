@@ -1,5 +1,6 @@
 #include "pitaya/connection.h"
 #include "connection/tcp_packet_framed.h"
+#include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
 #include "pitaya/protocol/packet.h"
 #include "utils/net.h"
@@ -17,6 +18,7 @@ using boost::optional;
 using std::cerr;
 using std::cout;
 using std::string;
+using ConnectionError = pitaya::connection::ConnectionError;
 
 namespace pitaya {
 namespace connection {
@@ -67,12 +69,12 @@ Connection::Start(const std::string& address)
             assert(std::this_thread::get_id() == this->_workerThreadId);
 
             if (ec) {
-                this->TcpConnectionFailed();
+                HandshakeFailed(ec);
                 return;
             }
 
             cout << "Connected to endpoint: " << host << ":" << port << "\n";
-            this->TcpConnectionDone();
+            TcpConnectionDone();
         });
     } catch (const system_error& exc) {
         throw Exception("Error starting the connection: " + string(exc.what()));
@@ -83,20 +85,9 @@ void
 Connection::TcpConnectionDone()
 {
     assert(std::this_thread::get_id() == _workerThreadId);
-    _eventListeners.Broadcast(Event::Connected, "Client successfully connected to server");
-
     // The client is connected to the server, now start the
     // pitaya protocol (handshake).
     SendHandshake();
-}
-
-void
-Connection::TcpConnectionFailed()
-{
-    assert(std::this_thread::get_id() == _workerThreadId);
-    _eventListeners.Broadcast(Event::ConnectionFailed, "Error making initial TCP connection");
-    cerr << "Error making connection\n";
-    // TODO: consider calling a reconnect function here.
 }
 
 void
@@ -132,7 +123,7 @@ Connection::ReceiveHandshakeResponse()
 
     _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
         if (ec) {
-            this->_eventListeners.Broadcast(Event::ConnectionFailed, ec.message());
+            HandshakeFailed(ec);
             return;
         }
 
@@ -145,44 +136,47 @@ Connection::ReceiveHandshakeResponse()
             // TODO: consider calling a reconnect function here.
             std::cerr << "Received more than one packet from the server in the handshake response, "
                          "closing connection\n";
-
-            this->_eventListeners.Broadcast(
-                Event::ConnectionFailed,
-                "Received more than one packet from the server in the handshake response");
-
+            HandshakeFailed(ConnectionError::TooManyPackets);
             return;
         }
 
         const auto& packet = packets[0];
 
         if (packet.type != protocol::PacketType::Handshake) {
-            this->_eventListeners.Broadcast(
-                Event::ConnectionFailed,
-                "Did not get a hanshake response from the server, closing connection\n");
+            HandshakeFailed(ConnectionError::WrongPacket);
             return;
         }
 
-        // TODO: parse handshake response into a JSON object and store it in the connection state.
-        std::cout << "Response is: " << string((char*)packet.body.data(), packet.body.size())
-                  << "\n";
-
         // TODO: Send handshake ack
-        SendHandshakeAck();
+        auto handshakeResponse = string((char*)packet.body.data(), packet.body.size());
+        SendHandshakeAck(std::move(handshakeResponse));
     });
 }
 
 void
-Connection::SendHandshakeAck()
+Connection::SendHandshakeAck(string handshakeResponse)
 {
-    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [](error_code ec) {
-        if (ec) {
-            std::cerr << "Failed to send hanshake ack\n";
-            return;
-        }
+    _packetFramed->SendPacket(protocol::NewHandshakeAck(),
+                              [this, res = std::move(handshakeResponse)](error_code ec) {
+                                  if (ec) {
+                                      std::cerr << "Failed to send hanshake ack\n";
+                                      return;
+                                  }
 
-        std::cout << "Sent handshake ack successfuly\n";
-        // TODO: Start heartbeat timer.
+                                  std::cout << "Sent handshake ack successfuly\n";
+
+                                  HandshakeSuccessful(std::move(res));
+                              });
+}
+
+void
+Connection::HandshakeSuccessful(std::string handshakeResponse)
+{
+    // Set connection state to connected and broadcast success event
+    _state.SetConnectedWithLock(*this->_ioContext, std::move(handshakeResponse), []() {
+        std::cout << "HEARTBEAT TICK MAN\n";
     });
+    _eventListeners.Broadcast(Event::Connected, "Connection successful");
 }
 
 void

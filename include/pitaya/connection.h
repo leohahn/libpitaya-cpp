@@ -3,64 +3,14 @@
 
 #include "pitaya/connection/event.h"
 #include "pitaya/connection/packet_framed.h"
+#include "pitaya/connection/state.h"
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/variant.hpp>
-#include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <thread>
-#include <vector>
 
 namespace pitaya {
 namespace connection {
-
-struct Inited
-{};
-
-struct ConnectionStarted
-{};
-
-struct HandshakeStarted
-{};
-
-struct Connected
-{};
-
-struct ConnectionFailed
-{
-    boost::system::error_code ec;
-    std::string reason;
-};
-
-class State
-{
-    using StateType =
-        boost::variant<Inited, ConnectionStarted, HandshakeStarted, Connected, ConnectionFailed>;
-
-public:
-    void lock() { _mutex.lock(); }
-    void unlock() { _mutex.unlock(); }
-
-    StateType& Val() { return _val; }
-    const StateType& Val() const { return _val; }
-
-    void SetConnectionFailed(boost::system::error_code ec, std::string reason)
-    {
-        ConnectionFailed s;
-        s.ec = ec;
-        s.reason = std::move(reason);
-        _val = std::move(s);
-    }
-
-    State(StateType val)
-        : _val(val)
-    {}
-
-private:
-    std::mutex _mutex;
-    StateType _val;
-};
 
 class Connection
 {
@@ -82,11 +32,11 @@ public:
 private:
     void StartWorkerThread();
     void TcpConnectionDone();
-    void TcpConnectionFailed();
     void SendHandshake();
     void HandshakeFailed(boost::system::error_code ec);
+    void HandshakeSuccessful(std::string handshakeResponse);
     void ReceiveHandshakeResponse();
-    void SendHandshakeAck();
+    void SendHandshakeAck(std::string handshakeResponse);
 
 private:
     // The current state of the connection.

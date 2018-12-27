@@ -9,6 +9,8 @@ namespace connection {
 enum class ConnectionError
 {
     InvalidPacketType = 1,
+    TooManyPackets = 2,
+    WrongPacket = 3,
 };
 
 class ErrorCategory : public boost::system::error_category
