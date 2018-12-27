@@ -2,7 +2,6 @@
 #include "connection/tcp_packet_framed.h"
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
-#include "pitaya/protocol/packet.h"
 #include "utils/net.h"
 #include <assert.h>
 #include <boost/asio.hpp>
@@ -173,10 +172,22 @@ void
 Connection::HandshakeSuccessful(std::string handshakeResponse)
 {
     // Set connection state to connected and broadcast success event
-    _state.SetConnectedWithLock(*this->_ioContext, std::move(handshakeResponse), []() {
-        std::cout << "HEARTBEAT TICK MAN\n";
-    });
-    _eventListeners.Broadcast(Event::Connected, "Connection successful");
+    {
+        std::lock_guard<decltype(_state)> lock(_state);
+        _state.SetConnected(*this->_ioContext, std::move(handshakeResponse), [this]() {
+            _packetFramed->SendPacket(protocol::NewHeartbeat(), [this](error_code ec) {
+                if (ec) {
+                    ConnectionError(ec);
+                }
+            });
+        }, [this]() {
+            std::cout << "Heartbeat timed out, closing connection\n";
+            ConnectionError(ConnectionError::HeartbeatTimeout);
+        });
+        _eventListeners.Broadcast(Event::Connected, "Connection successful");
+    }
+
+    ReceivePackets();
 }
 
 void
@@ -185,10 +196,74 @@ Connection::HandshakeFailed(error_code ec)
     cerr << "Failed to send handshake packet: " << ec.message() << "\n";
 
     std::lock_guard<State> lock(_state);
-    _state.SetConnectionFailed(ec, ec.message());
+    _state.SetInited();
     _eventListeners.Broadcast(Event::ConnectionFailed, ec.message());
 
     // TODO: consider calling a reconnect function here.
+}
+
+void
+Connection::ConnectionError(error_code ec)
+{
+    std::lock_guard<State> lock(_state);
+    if (_state.IsConnected()) {
+        cerr << "Error in connection: " << ec.message() << "\n";
+        _state.SetInited();
+        _eventListeners.Broadcast(Event::ConnectionError, ec.message());
+        _packetFramed->Disconnect();
+    }
+}
+
+void
+Connection::KickedFromServer()
+{
+    std::lock_guard<State> lock(_state);
+    if (_state.IsConnected()) {
+        _state.SetInited();
+        _eventListeners.Broadcast(Event::Kicked, "Kicked from server");
+        _packetFramed->Disconnect();
+    }
+}
+
+
+void
+Connection::ReceivePackets()
+{
+    _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
+        if (ec) {
+            ConnectionError(ec);
+            return;
+        }
+
+        for (const auto& p : packets) {
+            ProcessPacket(p);
+        }
+
+        ReceivePackets();
+    });
+}
+
+void 
+Connection::ProcessPacket(const protocol::Packet& packet)
+{
+    std::cout << "Processing packet " << packet.type << std::endl;
+
+    switch (packet.type) {
+        case protocol::PacketType::Heartbeat:
+            // Expected
+            _state.ExtendHeartbeatTimeout();
+            break;
+        case protocol::PacketType::Data:
+            break;
+        case protocol::PacketType::Kick:
+            // Expected
+            KickedFromServer();
+            break;
+        default:
+            assert(false && "Should not receive packets other than heartbeat, data and kick");
+            ConnectionError(ConnectionError::WrongPacket);
+            break;
+    }
 }
 
 void

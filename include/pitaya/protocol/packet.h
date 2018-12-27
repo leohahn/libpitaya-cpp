@@ -2,6 +2,7 @@
 #define PITAYA_PROTOCOL_PACKET_H
 
 #include <boost/optional.hpp>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,29 @@ enum class PacketType : uint8_t
     Data = 0x04,
     Kick = 0x05,
 };
+
+inline std::ostream&
+operator<<(std::ostream& os, PacketType p)
+{
+    switch (p) {
+        case PacketType::Handshake:
+            os << "Handshake";
+            break;
+        case PacketType::HandshakeAck:
+            os << "HandshakeAck";
+            break;
+        case PacketType::Heartbeat:
+            os << "Heartbeat";
+            break;
+        case PacketType::Data:
+            os << "Data";
+            break;
+        case PacketType::Kick:
+            os << "Kick";
+            break;
+    }
+    return os;
+}
 
 struct Packet
 {

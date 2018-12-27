@@ -2,6 +2,7 @@
 #define PITAYA_CONNECTION_STATE_H
 
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/system_timer.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/variant.hpp>
 #include <functional>
@@ -24,6 +25,7 @@ struct Connected
 {
     std::string handshakeResponse;
     boost::asio::steady_timer heartbeatTimer;
+    boost::asio::system_timer heartbeatTimeout;
     std::function<void()> heartbeatTick;
 
     Connected(boost::asio::io_context& ioContext,
@@ -31,20 +33,14 @@ struct Connected
               std::function<void()> heartbeatTick)
         : handshakeResponse(std::move(handshakeResponse))
         , heartbeatTimer(ioContext)
+        , heartbeatTimeout(ioContext)
         , heartbeatTick(std::move(heartbeatTick))
     {}
 };
 
-struct ConnectionFailed
-{
-    boost::system::error_code ec;
-    std::string reason;
-};
-
 class State
 {
-    using StateType =
-        boost::variant<Inited, ConnectionStarted, HandshakeStarted, Connected, ConnectionFailed>;
+    using StateType = boost::variant<Inited, Connected>;
 
 public:
     void lock() { _mutex.lock(); }
@@ -53,17 +49,15 @@ public:
     StateType& Val() { return _val; }
     const StateType& Val() const { return _val; }
 
-    void SetConnectionFailed(boost::system::error_code ec, std::string reason);
+    void SetInited();
     void SetConnected(boost::asio::io_context& ioContext,
                       std::string handshakeResponse,
-                      std::function<void()> heartbeatTick);
+                      std::function<void()> heartbeatTick,
+                      std::function<void()> heartbeatTimeoutCb);
 
-    template<typename A, typename B, typename C>
-    void SetConnectedWithLock(A&& a, B&& b, C&& c)
-    {
-        std::lock_guard<decltype(_mutex)> lock(_mutex);
-        SetConnected(std::forward<A>(a), std::forward<B>(b), std::forward<C>(c));
-    }
+    void ExtendHeartbeatTimeout();
+
+    bool IsConnected() const;
 
     State(StateType val)
         : _val(std::move(val))
@@ -73,7 +67,7 @@ private:
     void HeartbeatTick(boost::system::error_code ec);
 
 private:
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     StateType _val;
 };
 

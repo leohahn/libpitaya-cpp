@@ -35,6 +35,7 @@ public:
     void SendPacket(protocol::Packet packet, SendHandler handler) override;
     void ReceivePackets(ReceiveHandler handler) override;
     void Connect(const std::string& host, const std::string& port, ConnectHandler handler) override;
+    void Disconnect() override;
 
     // We cannot copy a TcpPacketFramed object.
     TcpPacketFramed& operator=(const TcpPacketFramed&) = delete;

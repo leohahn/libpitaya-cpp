@@ -14,6 +14,8 @@ enum class Event
 {
     Connected,
     ConnectionFailed,
+    ConnectionError,
+    Kicked,
 };
 
 inline std::ostream&
@@ -25,6 +27,12 @@ operator<<(std::ostream& os, Event ev)
             break;
         case Event::ConnectionFailed:
             os << "Connection Failed";
+            break;
+        case Event::ConnectionError:
+            os << "Connection Error";
+            break;
+        case Event::Kicked:
+            os << "Kicked";
             break;
     }
     return os;

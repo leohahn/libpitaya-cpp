@@ -22,7 +22,7 @@ main()
 {
     try {
         pitaya::Client client;
-        client.Connect("127.0.0.1:4100");
+        client.Connect("127.0.0.1:4200");
         client.AddEventListener([](pitaya::connection::Event ev, const std::string& msg) {
             cout << "===> Got event: (" << ev << ") => " << msg << "\n";
         });

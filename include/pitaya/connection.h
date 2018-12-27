@@ -2,6 +2,7 @@
 #define PITAYA_CONNECTION_H
 
 #include "pitaya/connection/event.h"
+#include "pitaya/protocol/packet.h"
 #include "pitaya/connection/packet_framed.h"
 #include "pitaya/connection/state.h"
 #include <boost/asio/ip/tcp.hpp>
@@ -33,10 +34,14 @@ private:
     void StartWorkerThread();
     void TcpConnectionDone();
     void SendHandshake();
+    void ConnectionError(boost::system::error_code ec);
     void HandshakeFailed(boost::system::error_code ec);
     void HandshakeSuccessful(std::string handshakeResponse);
     void ReceiveHandshakeResponse();
     void SendHandshakeAck(std::string handshakeResponse);
+    void ReceivePackets();
+    void ProcessPacket(const protocol::Packet& packet);
+    void KickedFromServer();
 
 private:
     // The current state of the connection.

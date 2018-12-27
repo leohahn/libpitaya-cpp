@@ -19,6 +19,8 @@ ErrorCategory::message(int ev) const
             return "Received too many packets from the server";
         case static_cast<int>(ConnectionError::WrongPacket):
             return "Received wrong packet from the server";
+        case static_cast<int>(ConnectionError::HeartbeatTimeout):
+            return "Did not receive heartbeat from server";
         default:
             return "Unknown error";
     }

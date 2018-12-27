@@ -56,6 +56,18 @@ TcpPacketFramed::Connect(const std::string& host, const std::string& port, Conne
 }
 
 void
+TcpPacketFramed::Disconnect()
+{
+    try {
+        _socket.shutdown(tcp::socket::shutdown_both);
+    } catch (const boost::exception& exc) {
+        // NOTE(lhahn): Boost throws an error if the socket was already shutdown.
+        // We just ignore it and continue execution normally.
+    }
+    if (_socket.is_open()) _socket.close();
+}
+
+void
 TcpPacketFramed::SendPacket(protocol::Packet packet, SendHandler handler)
 {
     if (_packetSendQueue.size() < kMaxQueuedPackets) {
@@ -97,8 +109,6 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
             try {
                 auto packets = this->ParsePacketsFromReadBuffer();
 
-                std::cout << "Parsed " << packets.size() << " packets\n";
-
                 if (packets.size() == 0) {
                     this->ReadToBuffer(handler);
                 } else {
@@ -136,7 +146,6 @@ TcpPacketFramed::SendNextPacket(SendHandler handler)
                 return;
             }
 
-            std::cout << "Successfuly sent packet id " << id << "\n";
             h(boost_errc::make_error_code(boost_errc::success));
             this->_writeBuffers.erase(id);
         });

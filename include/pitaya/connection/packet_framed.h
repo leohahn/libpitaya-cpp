@@ -23,6 +23,7 @@ public:
     virtual void Connect(const std::string& host,
                          const std::string& port,
                          ConnectHandler handler) = 0;
+    virtual void Disconnect() = 0;
 };
 
 } // namespace connection
