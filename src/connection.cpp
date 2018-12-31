@@ -8,6 +8,8 @@
 #include <boost/optional.hpp>
 #include <boost/system/error_code.hpp>
 #include <iostream>
+#include "logger.h"
+#include <rapidjson/document.h>
 
 namespace asio = boost::asio;
 using error_code = boost::system::error_code;
@@ -49,19 +51,19 @@ Connection::Start(const std::string& address)
 {
     assert(std::this_thread::get_id() != _workerThreadId);
 
-    cout << "Connection started!\n";
+    LOG(Debug) << "Connection started!";
 
     auto hostAndPort = utils::SplitHostAndPort(address);
 
     if (!hostAndPort) {
-        cerr << "Invalid address " << address << "\n";
+        LOG(Error) << "Invalid address " << address;
         return;
     }
 
     const auto& host = hostAndPort.value().first;
     const auto& port = hostAndPort.value().second;
 
-    cout << "Will connect to host " << host << " in port " << port << "\n";
+    LOG(Debug) << "Will connect to host " << host << " in port " << port;
 
     try {
         _packetFramed->Connect(host, port, [this, host, port](error_code ec) {
@@ -72,7 +74,7 @@ Connection::Start(const std::string& address)
                 return;
             }
 
-            cout << "Connected to endpoint: " << host << ":" << port << "\n";
+            LOG(Debug) << "Connected to endpoint: " << host << ":" << port;
             TcpConnectionDone();
         });
     } catch (const system_error& exc) {
@@ -93,7 +95,7 @@ void
 Connection::SendHandshake()
 {
     assert(std::this_thread::get_id() == _workerThreadId);
-    cout << "Sending handshake\n";
+    LOG(Debug) << "Sending handshake";
 
     // TODO: consider making a packet just a simple byte arreay instead
     // of a struct. This will avoid unnecessary copies like the one below.
@@ -118,7 +120,7 @@ Connection::ReceiveHandshakeResponse()
 {
     assert(std::this_thread::get_id() == _workerThreadId);
 
-    std::cout << "Will receive handshake response\n";
+    LOG(Debug) << "Will receive handshake response";
 
     _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
         if (ec) {
@@ -129,12 +131,12 @@ Connection::ReceiveHandshakeResponse()
         assert(packets.size() > 0 &&
                "If no error was returned, packets should be at least of size 1");
 
-        std::cout << "Received response from server\n";
+        LOG(Debug) << "Received response from server";
 
         if (packets.size() > 1) {
             // TODO: consider calling a reconnect function here.
-            std::cerr << "Received more than one packet from the server in the handshake response, "
-                         "closing connection\n";
+            LOG(Error) << "Received more than one packet from the server in the handshake response, "
+                         "closing connection";
             HandshakeFailed(ConnectionError::TooManyPackets);
             return;
         }
@@ -158,11 +160,11 @@ Connection::SendHandshakeAck(string handshakeResponse)
     _packetFramed->SendPacket(protocol::NewHandshakeAck(),
                               [this, res = std::move(handshakeResponse)](error_code ec) {
                                   if (ec) {
-                                      std::cerr << "Failed to send hanshake ack\n";
+                                      LOG(Error) << "Failed to send hanshake ack";
                                       return;
                                   }
 
-                                  std::cout << "Sent handshake ack successfuly\n";
+                                  LOG(Debug) << "Sent handshake ack successfuly";
 
                                   HandshakeSuccessful(std::move(res));
                               });
@@ -181,7 +183,7 @@ Connection::HandshakeSuccessful(std::string handshakeResponse)
                 }
             });
         }, [this]() {
-            std::cout << "Heartbeat timed out, closing connection\n";
+            LOG(Info) << "Heartbeat timed out, closing connection";
             ConnectionError(ConnectionError::HeartbeatTimeout);
         });
         _eventListeners.Broadcast(Event::Connected, "Connection successful");
@@ -193,7 +195,7 @@ Connection::HandshakeSuccessful(std::string handshakeResponse)
 void
 Connection::HandshakeFailed(error_code ec)
 {
-    cerr << "Failed to send handshake packet: " << ec.message() << "\n";
+    LOG(Error) << "Failed to send handshake packet: " << ec.message();
 
     std::lock_guard<State> lock(_state);
     _state.SetInited();
@@ -207,7 +209,7 @@ Connection::ConnectionError(error_code ec)
 {
     std::lock_guard<State> lock(_state);
     if (_state.IsConnected()) {
-        cerr << "Error in connection: " << ec.message() << "\n";
+        LOG(Error) << "Error in connection: " << ec.message();
         _state.SetInited();
         _eventListeners.Broadcast(Event::ConnectionError, ec.message());
         _packetFramed->Disconnect();
@@ -246,7 +248,7 @@ Connection::ReceivePackets()
 void 
 Connection::ProcessPacket(const protocol::Packet& packet)
 {
-    std::cout << "Processing packet " << packet.type << std::endl;
+    LOG(Debug) << "Processing packet " << packet.type;
 
     switch (packet.type) {
         case protocol::PacketType::Heartbeat:
@@ -270,9 +272,9 @@ void
 Connection::StartWorkerThread()
 {
     _workerThreadId = std::this_thread::get_id();
-    std::cout << "Running worker thread\n";
+    LOG(Info) << "Running worker thread";
     _ioContext->run();
-    std::cout << "No more work to do, exiting thread\n";
+    LOG(Info) << "No more work to do, exiting thread";
 }
 
 } // namespace connection

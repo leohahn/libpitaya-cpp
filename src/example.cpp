@@ -1,3 +1,4 @@
+#include "logger.h"
 #include "pitaya.h"
 #include "pitaya/exception.h"
 #include <array>
@@ -22,12 +23,12 @@ main()
 {
     try {
         pitaya::Client client;
-        client.Connect("127.0.0.1:4200");
+        client.Connect("127.0.0.1:4100");
         client.AddEventListener([](pitaya::connection::Event ev, const std::string& msg) {
-            cout << "===> Got event: (" << ev << ") => " << msg << "\n";
+            LOG(Info) << "===> Got event: (" << ev << ") => " << msg;
         });
     } catch (const pitaya::Exception& exc) {
-        cerr << "Failed: " << exc.what() << "\n";
+        LOG(Error) << "Failed: " << exc.what();
         return -1;
     }
 }

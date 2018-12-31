@@ -30,6 +30,9 @@ add_library(pitaya_cpp
     src/connection/tcp_packet_framed.cpp
     include/pitaya/connection/error.h
     src/connection/error.cpp
+    # Logging
+    src/logger.h
+    src/logger.cpp
     )
 
 target_compile_options(pitaya_cpp PRIVATE -Wall)
@@ -44,7 +47,9 @@ set_target_properties(pitaya_cpp
 target_link_libraries(pitaya_cpp
     PUBLIC
         CONAN_PKG::boost_asio
-        Threads::Threads)
+        Threads::Threads
+    PRIVATE
+        CONAN_PKG::rapidjson)
 
 #=========================================
 # Example target

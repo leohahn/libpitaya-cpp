@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <boost/asio.hpp>
 #include <iostream>
+#include "logger.h"
 
 namespace asio = boost::asio;
 using tcp = boost::asio::ip::tcp;
@@ -28,7 +29,7 @@ TcpPacketFramed::TcpPacketFramed(std::shared_ptr<boost::asio::io_context> ioCont
     , _readBufferHead(0)
 {
     _readBuffer.resize(_readBufferMaxSize(), 0);
-    std::cout << "TCP Packet Framed created\n";
+    LOG(Debug) << "TCP Packet Framed created";
 }
 
 void
@@ -97,7 +98,7 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
                 // If an error occured, behave as if no bytes were read.
                 // TODO: Broadcast error to client.
                 // TODO: Should the connection be closed here?
-                std::cerr << "Failed to read data from buffer: " << ec.message() << "\n";
+                LOG(Error) << "Failed to read data from buffer: " << ec.message();
                 handler(ec, vector<protocol::Packet>());
                 return;
             }
@@ -115,7 +116,7 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
                     handler(boost_errc::make_error_code(boost_errc::success), std::move(packets));
                 }
             } catch (const pitaya::Exception& exc) {
-                std::cerr << "Parsing server packets failed: " << exc.what() << "\n";
+                LOG(Error) << "Parsing server packets failed: " << exc.what();
                 handler(ConnectionError::InvalidPacketType, vector<protocol::Packet>());
             }
         });

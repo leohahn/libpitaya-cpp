@@ -1,5 +1,6 @@
 #include "pitaya/connection/state.h"
 #include <iostream>
+#include "logger.h"
 
 using error_code = boost::system::error_code;
 
@@ -10,13 +11,13 @@ void
 State::HeartbeatTick(boost::system::error_code ec)
 {
     if (ec) {
-        std::cerr << "Heartbeat timer failed: " << ec.message() << "\n";
+        LOG(Error) << "Heartbeat timer failed: " << ec.message();
         return;
     }
 
     Connected* conn = boost::get<Connected>(&_val);
     if (!conn) {
-        std::cerr << "Ignoring tick, state is not connected\n";
+        LOG(Error) << "Ignoring tick, state is not connected";
         return;
     }
 
@@ -68,7 +69,7 @@ State::ExtendHeartbeatTimeout()
 {
     Connected* conn = boost::get<Connected>(&_val);
     if (!conn) {
-        std::cerr << "Cannot extend heartbeat timeout, incorrect state\n";
+        LOG(Error) << "Cannot extend heartbeat timeout, incorrect state";
         return;
     }
 
