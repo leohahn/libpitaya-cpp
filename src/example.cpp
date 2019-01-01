@@ -21,9 +21,12 @@ using std::endl;
 int
 main()
 {
+    const char* address =
+        "a1d127034f31611e8858512b1bea90da-838011280.us-east-1.elb.amazonaws.com:3251";
+
     try {
         pitaya::Client client;
-        client.Connect("127.0.0.1:4100");
+        client.Connect(address);
         client.AddEventListener([](pitaya::connection::Event ev, const std::string& msg) {
             LOG(Info) << "===> Got event: (" << ev << ") => " << msg;
         });

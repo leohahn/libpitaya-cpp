@@ -23,6 +23,8 @@ add_library(pitaya_cpp
     include/pitaya/connection.h
     src/connection.cpp
     src/utils/net.h
+    src/utils/gzip.h
+    src/utils/gzip.cpp
     include/pitaya/connection/state.h
     src/connection/state.cpp
     # Connection
@@ -49,7 +51,8 @@ target_link_libraries(pitaya_cpp
         CONAN_PKG::boost_asio
         Threads::Threads
     PRIVATE
-        CONAN_PKG::rapidjson)
+        CONAN_PKG::rapidjson
+        CONAN_PKG::zlib)
 
 #=========================================
 # Example target

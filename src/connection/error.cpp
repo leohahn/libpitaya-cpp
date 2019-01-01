@@ -21,6 +21,10 @@ ErrorCategory::message(int ev) const
             return "Received wrong packet from the server";
         case static_cast<int>(ConnectionError::HeartbeatTimeout):
             return "Did not receive heartbeat from server";
+        case static_cast<int>(ConnectionError::InvalidHandshakeCompression):
+            return "Invalid handshake response compression from server";
+        case static_cast<int>(ConnectionError::InvalidHeartbeatJson):
+            return "Invalid heartbeat json value from server";
         default:
             return "Unknown error";
     }

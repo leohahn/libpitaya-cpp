@@ -1,14 +1,15 @@
 #include "pitaya/connection.h"
 #include "connection/tcp_packet_framed.h"
+#include "logger.h"
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
+#include "utils/gzip.h"
 #include "utils/net.h"
 #include <assert.h>
 #include <boost/asio.hpp>
 #include <boost/optional.hpp>
 #include <boost/system/error_code.hpp>
 #include <iostream>
-#include "logger.h"
 #include <rapidjson/document.h>
 
 namespace asio = boost::asio;
@@ -135,8 +136,9 @@ Connection::ReceiveHandshakeResponse()
 
         if (packets.size() > 1) {
             // TODO: consider calling a reconnect function here.
-            LOG(Error) << "Received more than one packet from the server in the handshake response, "
-                         "closing connection";
+            LOG(Error)
+                << "Received more than one packet from the server in the handshake response, "
+                   "closing connection";
             HandshakeFailed(ConnectionError::TooManyPackets);
             return;
         }
@@ -148,8 +150,29 @@ Connection::ReceiveHandshakeResponse()
             return;
         }
 
-        // TODO: Send handshake ack
-        auto handshakeResponse = string((char*)packet.body.data(), packet.body.size());
+        std::string handshakeResponse;
+
+        if (utils::IsCompressed(packet.body.data(), packet.body.size())) {
+            LOG(Info) << "Handshake response is compressed";
+
+            uint8_t* output = nullptr;
+            size_t size = 0;
+
+            int rc = utils::Decompress(
+                &output, &size, const_cast<uint8_t*>(packet.body.data()), packet.body.size());
+
+            if (rc) {
+                LOG(Error) << "Failed to decompress handshake response, closing connection";
+                ConnectionError(ConnectionError::InvalidHandshakeCompression);
+                return;
+            }
+
+            handshakeResponse = string((char*)output, size);
+            free(output);
+        } else {
+            handshakeResponse = string((char*)packet.body.data(), packet.body.size());
+        }
+
         SendHandshakeAck(std::move(handshakeResponse));
     });
 }
@@ -157,6 +180,21 @@ Connection::ReceiveHandshakeResponse()
 void
 Connection::SendHandshakeAck(string handshakeResponse)
 {
+    rapidjson::Document doc;
+    doc.Parse(handshakeResponse.c_str());
+
+    if (doc.HasParseError()) {
+        ConnectionError(ConnectionError::InvalidHeartbeatJson);
+        return;
+    }
+
+    LOG(Info) << handshakeResponse;
+
+    if (!doc.HasMember("sys")) {
+        ConnectionError(ConnectionError::InvalidHeartbeatJson);
+        return;
+    }
+
     _packetFramed->SendPacket(protocol::NewHandshakeAck(),
                               [this, res = std::move(handshakeResponse)](error_code ec) {
                                   if (ec) {
@@ -176,16 +214,20 @@ Connection::HandshakeSuccessful(std::string handshakeResponse)
     // Set connection state to connected and broadcast success event
     {
         std::lock_guard<decltype(_state)> lock(_state);
-        _state.SetConnected(*this->_ioContext, std::move(handshakeResponse), [this]() {
-            _packetFramed->SendPacket(protocol::NewHeartbeat(), [this](error_code ec) {
-                if (ec) {
-                    ConnectionError(ec);
-                }
-            });
-        }, [this]() {
-            LOG(Info) << "Heartbeat timed out, closing connection";
-            ConnectionError(ConnectionError::HeartbeatTimeout);
-        });
+        _state.SetConnected(*this->_ioContext,
+                            std::move(handshakeResponse),
+                            [this]() {
+                                _packetFramed->SendPacket(protocol::NewHeartbeat(),
+                                                          [this](error_code ec) {
+                                                              if (ec) {
+                                                                  ConnectionError(ec);
+                                                              }
+                                                          });
+                            },
+                            [this]() {
+                                LOG(Info) << "Heartbeat timed out, closing connection";
+                                ConnectionError(ConnectionError::HeartbeatTimeout);
+                            });
         _eventListeners.Broadcast(Event::Connected, "Connection successful");
     }
 
@@ -227,7 +269,6 @@ Connection::KickedFromServer()
     }
 }
 
-
 void
 Connection::ReceivePackets()
 {
@@ -245,7 +286,7 @@ Connection::ReceivePackets()
     });
 }
 
-void 
+void
 Connection::ProcessPacket(const protocol::Packet& packet)
 {
     LOG(Debug) << "Processing packet " << packet.type;

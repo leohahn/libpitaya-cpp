@@ -12,6 +12,8 @@ enum class ConnectionError
     TooManyPackets,
     WrongPacket,
     HeartbeatTimeout,
+    InvalidHeartbeatJson,
+    InvalidHandshakeCompression,
 };
 
 class ErrorCategory : public boost::system::error_category
