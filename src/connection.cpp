@@ -47,6 +47,24 @@ Connection::~Connection()
     }
 }
 
+void 
+Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, RequestHandler handler)
+{
+    LOG(Debug) << "Posting request for route " << route;
+
+    _ioContext->post([this, route, data = std::move(data), handler = std::move(handler)]() {
+        assert(std::this_thread::get_id() == _workerThreadId);
+
+        LOG(Debug) << "Sending request for route " << route;
+
+        auto packet = protocol::NewData(std::move(data));
+
+        _packetFramed->SendPacket(packet, [](error_code ec) {
+
+        });
+    });
+}
+
 void
 Connection::Start(const std::string& address)
 {

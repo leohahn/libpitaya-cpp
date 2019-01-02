@@ -47,12 +47,10 @@ struct Packet
 {
 public:
     PacketType type;
-    uint32_t length;
     std::vector<uint8_t> body;
 
     Packet()
         : type(PacketType::Handshake)
-        , length(0)
     {}
 
     void SerializeInto(std::vector<uint8_t>& buf) const;
@@ -64,7 +62,6 @@ NewHandshake(const std::string& json)
     Packet p;
     p.type = PacketType::Handshake;
     p.body = std::vector<uint8_t>(json.data(), json.data() + json.size());
-    p.length = p.body.size();
     return p;
 }
 
@@ -74,7 +71,6 @@ NewHandshake(uint8_t* data, size_t length)
     Packet p;
     p.type = PacketType::Handshake;
     p.body = std::vector<uint8_t>(data, data + length);
-    p.length = p.body.size();
     return p;
 }
 
@@ -99,8 +95,16 @@ NewData(uint8_t* data, size_t size)
 {
     Packet p;
     p.type = PacketType::Data;
-    p.length = static_cast<uint32_t>(size);
     p.body = std::vector<uint8_t>(data, data + size);
+    return p;
+}
+
+inline Packet
+NewData(std::vector<uint8_t> data)
+{
+    Packet p;
+    p.type = PacketType::Data;
+    p.body = std::move(data);
     return p;
 }
 

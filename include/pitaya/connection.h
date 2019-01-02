@@ -6,17 +6,31 @@
 #include "pitaya/connection/state.h"
 #include "pitaya/protocol/packet.h"
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/variant.hpp>
 #include <memory>
 #include <chrono>
 #include <string>
 #include <thread>
+#include <functional>
 
 namespace pitaya {
 namespace connection {
 
+struct RequestError
+{
+    std::string code;
+    std::string message;
+    std::string metadata;
+};
+
+using RequestData = std::vector<uint8_t>;
+using RequestResult = boost::variant<RequestData, RequestError>;
+using RequestHandler = std::function<void(RequestResult)>;
+
 class Connection
 {
 public:
+
     Connection();
     ~Connection();
 
@@ -27,6 +41,7 @@ public:
         _eventListeners.Add(std::move(listener));
     }
 
+    void PostRequest(const std::string& route, std::vector<uint8_t> data, RequestHandler handler);
     // We cannot copy a Connection object.
     Connection& operator=(const Connection&) = delete;
     Connection(const Connection&) = delete;

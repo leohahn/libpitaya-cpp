@@ -30,6 +30,20 @@ main()
         client.AddEventListener([](pitaya::connection::Event ev, const std::string& msg) {
             LOG(Info) << "===> Got event: (" << ev << ") => " << msg;
         });
+
+        client.Request("connector.getsessiondata", [](pitaya::connection::RequestResult result) {
+            auto err = boost::get<pitaya::connection::RequestError>(&result);
+            if (err) {
+                LOG(Error) << "Request failed: code = " << err->code << ", message = " << err->message;
+                return;
+            }
+
+            auto data = boost::get<pitaya::connection::RequestData>(&result);
+            assert(data != nullptr);
+            if (data) {
+                LOG(Info) << "Received data from server: " << std::string((char*)data->data(), data->size());
+            }
+        });
     } catch (const pitaya::Exception& exc) {
         LOG(Error) << "Failed: " << exc.what();
         return -1;

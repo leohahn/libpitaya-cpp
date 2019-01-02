@@ -21,4 +21,16 @@ Client::AddEventListener(connection::Listener listener)
     _connection.AddEventListener(std::move(listener));
 }
 
+void 
+Client::Request(const std::string& route, connection::RequestHandler handler)
+{
+    _connection.PostRequest(route, std::vector<uint8_t>(), std::move(handler));
+}
+
+void 
+Client::Request(const std::string& route, std::vector<uint8_t> data, connection::RequestHandler handler)
+{
+    _connection.PostRequest(route, std::move(data), std::move(handler));
+}
+
 } // namespace pitaya

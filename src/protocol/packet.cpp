@@ -28,14 +28,14 @@ ThirdByte(uint32_t val)
 void
 Packet::SerializeInto(std::vector<uint8_t>& buf) const
 {
-    buf.reserve(buf.size() + kPacketHeaderSize + length);
+    buf.reserve(buf.size() + kPacketHeaderSize + body.size());
 
     // Write header
     buf.push_back(static_cast<uint8_t>(type));
     // Write length in big endian
-    buf.push_back(ThirdByte(length));
-    buf.push_back(SecondByte(length));
-    buf.push_back(FirstByte(length));
+    buf.push_back(ThirdByte(body.size()));
+    buf.push_back(SecondByte(body.size()));
+    buf.push_back(FirstByte(body.size()));
     // Write the body of the packet
     buf.insert(buf.end(), body.begin(), body.end());
 }
