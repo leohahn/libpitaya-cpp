@@ -195,27 +195,40 @@ Connection::SendHandshakeAck(string handshakeResponse)
         return;
     }
 
-    _packetFramed->SendPacket(protocol::NewHandshakeAck(),
-                              [this, res = std::move(handshakeResponse)](error_code ec) {
-                                  if (ec) {
-                                      LOG(Error) << "Failed to send hanshake ack";
-                                      return;
-                                  }
+    if (!doc["sys"].HasMember("heartbeat")) {
+        ConnectionError(ConnectionError::InvalidHeartbeatJson);
+        return;
+    }
 
-                                  LOG(Debug) << "Sent handshake ack successfuly";
+    if (!doc["sys"]["heartbeat"].IsUint64()) {
+        ConnectionError(ConnectionError::InvalidHeartbeatJson);
+        return;
+    }
 
-                                  HandshakeSuccessful(std::move(res));
-                              });
+    auto heartbeatInterval = std::chrono::seconds(doc["sys"]["heartbeat"].GetUint64());
+
+    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval](error_code ec) {
+        if (ec) {
+            LOG(Error) << "Failed to send hanshake ack";
+            return;
+        }
+
+        LOG(Debug) << "Sent handshake ack successfuly";
+
+        HandshakeSuccessful(heartbeatInterval);
+    });
 }
 
 void
-Connection::HandshakeSuccessful(std::string handshakeResponse)
+Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval)
 {
+    LOG(Debug) << "Heartbeat Interval is " << heartbeatInterval.count() << " seconds";
+
     // Set connection state to connected and broadcast success event
     {
         std::lock_guard<decltype(_state)> lock(_state);
         _state.SetConnected(*this->_ioContext,
-                            std::move(handshakeResponse),
+                            std::move(heartbeatInterval),
                             [this]() {
                                 _packetFramed->SendPacket(protocol::NewHeartbeat(),
                                                           [this](error_code ec) {

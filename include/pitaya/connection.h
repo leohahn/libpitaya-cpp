@@ -2,11 +2,12 @@
 #define PITAYA_CONNECTION_H
 
 #include "pitaya/connection/event.h"
-#include "pitaya/protocol/packet.h"
 #include "pitaya/connection/packet_framed.h"
 #include "pitaya/connection/state.h"
+#include "pitaya/protocol/packet.h"
 #include <boost/asio/ip/tcp.hpp>
 #include <memory>
+#include <chrono>
 #include <string>
 #include <thread>
 
@@ -26,7 +27,7 @@ public:
         _eventListeners.Add(std::move(listener));
     }
 
-    // We cannot copy a Pitaya object.
+    // We cannot copy a Connection object.
     Connection& operator=(const Connection&) = delete;
     Connection(const Connection&) = delete;
 
@@ -36,7 +37,7 @@ private:
     void SendHandshake();
     void ConnectionError(boost::system::error_code ec);
     void HandshakeFailed(boost::system::error_code ec);
-    void HandshakeSuccessful(std::string handshakeResponse);
+    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval);
     void ReceiveHandshakeResponse();
     void SendHandshakeAck(std::string handshakeResponse);
     void ReceivePackets();

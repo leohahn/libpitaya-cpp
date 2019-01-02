@@ -23,15 +23,15 @@ struct HandshakeStarted
 
 struct Connected
 {
-    std::string handshakeResponse;
+    std::chrono::seconds heartbeatInterval;
     boost::asio::steady_timer heartbeatTimer;
     boost::asio::system_timer heartbeatTimeout;
     std::function<void()> heartbeatTick;
 
     Connected(boost::asio::io_context& ioContext,
-              std::string handshakeResponse,
+              std::chrono::seconds heartbeatInterval,
               std::function<void()> heartbeatTick)
-        : handshakeResponse(std::move(handshakeResponse))
+        : heartbeatInterval(heartbeatInterval)
         , heartbeatTimer(ioContext)
         , heartbeatTimeout(ioContext)
         , heartbeatTick(std::move(heartbeatTick))
@@ -51,7 +51,7 @@ public:
 
     void SetInited();
     void SetConnected(boost::asio::io_context& ioContext,
-                      std::string handshakeResponse,
+                      std::chrono::seconds heartbeatInterval,
                       std::function<void()> heartbeatTick,
                       std::function<void()> heartbeatTimeoutCb);
 

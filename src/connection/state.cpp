@@ -44,17 +44,20 @@ State::IsConnected() const
 
 void
 State::SetConnected(boost::asio::io_context& ioContext,
-                    std::string handshakeResponse,
+                    std::chrono::seconds heartbeatInterval,
                     std::function<void()> heartbeatTick,
                     std::function<void()> heartbeatTimeoutCb)
 {
-    Connected connected(ioContext, std::move(handshakeResponse), std::move(heartbeatTick));
-    // TODO, FIXME: do not hardcode expire time
-    connected.heartbeatTimer.expires_after(std::chrono::seconds(4));
+    Connected connected(ioContext, std::move(heartbeatInterval), std::move(heartbeatTick));
+
+    connected.heartbeatTimer.expires_after(heartbeatInterval);
     connected.heartbeatTimer.async_wait(
         std::bind(&State::HeartbeatTick, this, std::placeholders::_1));
 
-    connected.heartbeatTimeout.expires_at(std::chrono::system_clock::now() + std::chrono::seconds(8));
+    //
+    // TODO(lhahn): Should the initial timeout be after 2 times the heartbeat interval??
+    //
+    connected.heartbeatTimeout.expires_at(std::chrono::system_clock::now() + (heartbeatInterval * 2));
     connected.heartbeatTimeout.async_wait([heartbeatTimeoutCb](error_code ec) {
         if (!ec) {
             heartbeatTimeoutCb();
