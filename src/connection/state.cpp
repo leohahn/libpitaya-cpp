@@ -45,10 +45,11 @@ State::IsConnected() const
 void
 State::SetConnected(boost::asio::io_context& ioContext,
                     std::chrono::seconds heartbeatInterval,
+                    std::unordered_map<std::string, int> routeDict,
                     std::function<void()> heartbeatTick,
                     std::function<void()> heartbeatTimeoutCb)
 {
-    Connected connected(ioContext, std::move(heartbeatInterval), std::move(heartbeatTick));
+    Connected connected(ioContext, std::move(heartbeatInterval), std::move(routeDict), std::move(heartbeatTick));
 
     connected.heartbeatTimer.expires_after(heartbeatInterval);
     connected.heartbeatTimer.async_wait(

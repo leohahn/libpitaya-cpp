@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <functional>
+#include <unordered_map>
 
 namespace pitaya {
 namespace connection {
@@ -52,7 +53,7 @@ private:
     void SendHandshake();
     void ConnectionError(boost::system::error_code ec);
     void HandshakeFailed(boost::system::error_code ec);
-    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval);
+    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::unordered_map<std::string, int> routeDict);
     void ReceiveHandshakeResponse();
     void SendHandshakeAck(std::string handshakeResponse);
     void ReceivePackets();

@@ -8,6 +8,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 namespace pitaya {
 namespace connection {
@@ -24,14 +25,17 @@ struct HandshakeStarted
 struct Connected
 {
     std::chrono::seconds heartbeatInterval;
+    std::unordered_map<std::string, int> routeDict;
     boost::asio::steady_timer heartbeatTimer;
     boost::asio::system_timer heartbeatTimeout;
     std::function<void()> heartbeatTick;
 
     Connected(boost::asio::io_context& ioContext,
               std::chrono::seconds heartbeatInterval,
+              std::unordered_map<std::string, int> routeDict,
               std::function<void()> heartbeatTick)
         : heartbeatInterval(heartbeatInterval)
+        , routeDict(std::move(routeDict))
         , heartbeatTimer(ioContext)
         , heartbeatTimeout(ioContext)
         , heartbeatTick(std::move(heartbeatTick))
@@ -52,6 +56,7 @@ public:
     void SetInited();
     void SetConnected(boost::asio::io_context& ioContext,
                       std::chrono::seconds heartbeatInterval,
+                      std::unordered_map<std::string, int> routeDict,
                       std::function<void()> heartbeatTick,
                       std::function<void()> heartbeatTimeoutCb);
 

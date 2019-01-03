@@ -53,14 +53,32 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
     LOG(Debug) << "Posting request for route " << route;
 
     _ioContext->post([this, route, data = std::move(data), handler = std::move(handler)]() {
+        // If the state is not connected, it means that the request cannot be sent, therefore
+        // just call the handler with an error.
+        if (!_state.IsConnected()) {
+            RequestError err;
+            err.code = "PIT-RESET";
+            err.message = "Cannot send request, connection is not in the connected state";
+            handler(std::move(err));
+            return;
+        }
+
         assert(std::this_thread::get_id() == _workerThreadId);
 
         LOG(Debug) << "Sending request for route " << route;
 
         auto packet = protocol::NewData(std::move(data));
+        _packetFramed->SendPacket(packet, [handler = std::move(handler)](error_code ec) {
+            if (ec) {
+                LOG(Error) << "Failed to send request: " << ec.message();
+                RequestError err;
+                err.code = "PIT-500";
+                err.message = ec.message();
+                handler(std::move(err));
+                return;
+            }
 
-        _packetFramed->SendPacket(packet, [](error_code ec) {
-
+            LOG(Debug) << "Request successfully sent!";
         });
     });
 }
@@ -223,9 +241,26 @@ Connection::SendHandshakeAck(string handshakeResponse)
         return;
     }
 
+    std::unordered_map<std::string, int> routeDict;
+
+    if (doc["sys"].HasMember("dict") && doc["sys"]["dict"].IsObject()) {
+        for (const auto& m : doc["sys"]["dict"].GetObject()) {
+            if (m.name.IsString() && m.value.IsInt()) {
+                routeDict.insert(std::make_pair(m.name.GetString(), m.value.GetInt()));
+            }
+        }
+    }
+
+    if (!routeDict.empty()) {
+        LOG(Debug) << "Route dict:";
+        for (const auto& r : routeDict) {
+            LOG(Debug) << "    " << r.first << " -> " << r.second;
+        }
+    }
+
     auto heartbeatInterval = std::chrono::seconds(doc["sys"]["heartbeat"].GetUint64());
 
-    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval](error_code ec) {
+    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval, routeDict = std::move(routeDict)](error_code ec) {
         if (ec) {
             LOG(Error) << "Failed to send hanshake ack";
             return;
@@ -233,12 +268,12 @@ Connection::SendHandshakeAck(string handshakeResponse)
 
         LOG(Debug) << "Sent handshake ack successfuly";
 
-        HandshakeSuccessful(heartbeatInterval);
+        HandshakeSuccessful(heartbeatInterval, routeDict);
     });
 }
 
 void
-Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval)
+Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::unordered_map<std::string, int> routeDict)
 {
     LOG(Debug) << "Heartbeat Interval is " << heartbeatInterval.count() << " seconds";
 
@@ -247,6 +282,7 @@ Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval)
         std::lock_guard<decltype(_state)> lock(_state);
         _state.SetConnected(*this->_ioContext,
                             std::move(heartbeatInterval),
+                            std::move(routeDict),
                             [this]() {
                                 _packetFramed->SendPacket(protocol::NewHeartbeat(),
                                                           [this](error_code ec) {

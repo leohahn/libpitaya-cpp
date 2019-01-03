@@ -7,7 +7,7 @@
 #ifdef LOG
 #error "The LOG macro is already defined"
 #else
-#define LOG(level) pitaya::StreamLogger(pitaya::LogLevel_##level, __FUNCTION__, __LINE__)
+#define LOG(level) pitaya::StreamLogger(pitaya::LogLevel_##level, __FILE__, __LINE__)
 #endif
 
 namespace pitaya {
