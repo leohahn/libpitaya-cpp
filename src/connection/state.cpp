@@ -24,8 +24,7 @@ State::HeartbeatTick(boost::system::error_code ec)
     // Call tick function
     conn->heartbeatTick();
 
-    // TODO, FIXME: do not hardcode expire time
-    conn->heartbeatTimer.expires_after(std::chrono::seconds(4));
+    conn->heartbeatTimer.expires_after(conn->heartbeatInterval);
     conn->heartbeatTimer.async_wait(std::bind(&State::HeartbeatTick, this, std::placeholders::_1));
 }
 
@@ -42,6 +41,8 @@ State::IsConnected() const
     return conn != nullptr;
 }
 
+static constexpr int kHeartbeatFactor = 3;
+
 void
 State::SetConnected(boost::asio::io_context& ioContext,
                     std::chrono::seconds heartbeatInterval,
@@ -49,7 +50,11 @@ State::SetConnected(boost::asio::io_context& ioContext,
                     std::function<void()> heartbeatTick,
                     std::function<void()> heartbeatTimeoutCb)
 {
-    Connected connected(ioContext, std::move(heartbeatInterval), std::move(routeDict), std::move(heartbeatTick));
+    Connected connected(ioContext, 
+                        std::move(heartbeatInterval),
+                        heartbeatInterval * kHeartbeatFactor,
+                        std::move(routeDict),
+                        std::move(heartbeatTick));
 
     connected.heartbeatTimer.expires_after(heartbeatInterval);
     connected.heartbeatTimer.async_wait(
@@ -58,7 +63,8 @@ State::SetConnected(boost::asio::io_context& ioContext,
     //
     // TODO(lhahn): Should the initial timeout be after 2 times the heartbeat interval??
     //
-    connected.heartbeatTimeout.expires_at(std::chrono::system_clock::now() + (heartbeatInterval * 2));
+    connected.heartbeatTimeout.expires_at(
+        std::chrono::system_clock::now() + connected.heartbeatTimeoutSeconds);
     connected.heartbeatTimeout.async_wait([heartbeatTimeoutCb](error_code ec) {
         if (!ec) {
             heartbeatTimeoutCb();
@@ -77,7 +83,8 @@ State::ExtendHeartbeatTimeout()
         return;
     }
 
-    conn->heartbeatTimeout.expires_at(std::chrono::system_clock::now() + std::chrono::seconds(4));
+    conn->heartbeatTimeout.expires_at(
+        std::chrono::system_clock::now() + conn->heartbeatTimeoutSeconds);
 }
 
 } // namespace connection

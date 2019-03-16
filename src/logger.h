@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <ctime>
 
 #ifdef LOG
 #error "The LOG macro is already defined"
@@ -30,7 +31,13 @@ class StreamLogger
 public:
     StreamLogger(LogLevel level, const char* function, int line)
     {
-        _oss << LogLevelNames[level] << function << "(" << line << "): ";
+        const int kMaxSizeForTime = 32;
+        char timeBuf[34];
+
+        time_t t = std::time(NULL);
+        (void)std::strftime(timeBuf, kMaxSizeForTime, "[%Y-%m-%d %H:%M:%S] ", localtime(&t));
+
+        _oss << LogLevelNames[level] << timeBuf << function << "(" << line << "): ";
     }
 
     ~StreamLogger() { std::cout << _oss.str() << "\n"; }

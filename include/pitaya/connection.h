@@ -62,6 +62,8 @@ private:
     void KickedFromServer();
 
 private:
+    size_t _reqId;
+
     // The current state of the connection.
     State _state;
 

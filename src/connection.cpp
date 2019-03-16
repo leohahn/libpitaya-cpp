@@ -1,4 +1,5 @@
 #include "pitaya/connection.h"
+#include "pitaya/protocol/message.h"
 #include "connection/tcp_packet_stream.h"
 #include "logger.h"
 #include "pitaya/connection/error.h"
@@ -66,11 +67,17 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
             return;
         }
 
+        auto* ptr = boost::get<Connected>(&_state.Val());
+        assert(ptr);
+
         assert(std::this_thread::get_id() == _workerThreadId);
 
         LOG(Debug) << "Sending request for route " << route;
 
-        auto packet = protocol::NewData(std::move(data));
+        // TODO: is this the best way to handle request id's?
+        auto msg = protocol::Message::NewRequest(_reqId++, route, std::move(data));
+        auto packet = protocol::NewData(msg, ptr->routeDict);
+
         _packetStream->SendPacket(packet, [handler = std::move(handler)](error_code ec) {
             if (ec) {
                 LOG(Error) << "Failed to send request: " << ec.message();
@@ -276,7 +283,8 @@ Connection::SendHandshakeAck(string handshakeResponse)
 }
 
 void
-Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::unordered_map<std::string, int> routeDict)
+Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
+                                std::unordered_map<std::string, int> routeDict)
 {
     LOG(Debug) << "Heartbeat Interval is " << heartbeatInterval.count() << " seconds";
 
@@ -287,6 +295,7 @@ Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::uno
                             std::move(heartbeatInterval),
                             std::move(routeDict),
                             [this]() {
+                                LOG(Debug) << "New tick, sending heartbeat!";
                                 _packetStream->SendPacket(protocol::NewHeartbeat(),
                                                           [this](error_code ec) {
                                                               if (ec) {
@@ -348,6 +357,9 @@ Connection::ReceivePackets()
             return;
         }
 
+        // TODO: remove this assertion
+        assert(packets.size() == 1);
+
         for (const auto& p : packets) {
             ProcessPacket(p);
         }
@@ -359,14 +371,13 @@ Connection::ReceivePackets()
 void
 Connection::ProcessPacket(const protocol::Packet& packet)
 {
-    LOG(Debug) << "Processing packet " << packet.type;
-
     switch (packet.type) {
         case protocol::PacketType::Heartbeat:
-            // Expected
+            LOG(Debug) << "Received heartbeat from server";
             _state.ExtendHeartbeatTimeout();
             break;
         case protocol::PacketType::Data:
+            LOG(Debug) << "Ignoring data packet for the moment (FIX THIS)";
             break;
         case protocol::PacketType::Kick:
             // Expected

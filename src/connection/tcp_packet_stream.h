@@ -22,7 +22,6 @@ public:
         explicit ReadBufferMaxSize(size_t size)
             : _val(size)
         {}
-
         size_t operator()() const { return _val; }
 
     private:
@@ -48,6 +47,8 @@ private:
 
 private:
     std::shared_ptr<boost::asio::io_context> _ioContext;
+
+    // The raw tcp socket
     boost::asio::ip::tcp::socket _socket;
 
     std::deque<protocol::Packet> _packetSendQueue;

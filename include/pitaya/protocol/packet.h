@@ -1,7 +1,10 @@
 #ifndef PITAYA_PROTOCOL_PACKET_H
 #define PITAYA_PROTOCOL_PACKET_H
 
+#include "pitaya/exception.h"
+#include "pitaya/protocol/message.h"
 #include <boost/optional.hpp>
+#include <boost/variant.hpp>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -18,6 +21,12 @@ enum class PacketType : uint8_t
     Heartbeat = 0x03,
     Data = 0x04,
     Kick = 0x05,
+};
+
+enum class RouteCompression
+{
+    Yes,
+    No,
 };
 
 inline std::ostream&
@@ -91,11 +100,11 @@ NewHeartbeat()
 }
 
 inline Packet
-NewData(uint8_t* data, size_t size)
+NewData(Message message, const std::unordered_map<std::string, int>& routeDict)
 {
     Packet p;
     p.type = PacketType::Data;
-    p.body = std::vector<uint8_t>(data, data + size);
+    message.SerializeInto(p.body, routeDict);
     return p;
 }
 
@@ -109,16 +118,38 @@ NewData(std::vector<uint8_t> data)
 }
 
 inline Packet
+NewData(uint8_t* start, size_t length)
+{
+    Packet p;
+    p.type = PacketType::Data;
+    p.body = std::vector<uint8_t>(start, start + length);
+    return p;
+}
+
+inline Packet
 NewKick()
 {
     Packet p;
     p.type = PacketType::Kick;
-    // TODO: add data contents
     return p;
 }
 
-Packet Deserialize(const std::vector<uint8_t>& buf);
+inline std::vector<uint8_t>
+NewRequestMessage(uint64_t msgId,
+                  boost::variant<std::string, int> codeOrRoute,
+                  std::vector<uint8_t> data)
+{
+    assert(false && "invalid function specialization");
+    return std::vector<uint8_t>();
+}
 
+/**
+ * @brief Returns a PacketType given a 1 byte integer. If the number is invalid,
+ * returns boost::none.
+ *
+ * @param packetType the packet type represented as a byte.
+ * @return boost::optional<PacketType>
+ */
 inline boost::optional<PacketType>
 PacketTypeFromByte(uint8_t packetType)
 {

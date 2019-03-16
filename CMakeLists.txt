@@ -19,6 +19,8 @@ add_library(pitaya_cpp
     # Protocol
     include/pitaya/protocol/packet.h
     src/protocol/packet.cpp
+    include/pitaya/protocol/message.h
+    src/protocol/message.cpp
     # Connection
     include/pitaya/connection.h
     src/connection.cpp

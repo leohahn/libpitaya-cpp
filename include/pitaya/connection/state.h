@@ -25,6 +25,8 @@ struct HandshakeStarted
 struct Connected
 {
     std::chrono::seconds heartbeatInterval;
+    std::chrono::seconds heartbeatTimeoutSeconds;
+
     std::unordered_map<std::string, int> routeDict;
     boost::asio::steady_timer heartbeatTimer;
     boost::asio::system_timer heartbeatTimeout;
@@ -32,9 +34,11 @@ struct Connected
 
     Connected(boost::asio::io_context& ioContext,
               std::chrono::seconds heartbeatInterval,
+              std::chrono::seconds heartbeatTimeoutSeconds,
               std::unordered_map<std::string, int> routeDict,
               std::function<void()> heartbeatTick)
         : heartbeatInterval(heartbeatInterval)
+        , heartbeatTimeoutSeconds(heartbeatTimeoutSeconds)
         , routeDict(std::move(routeDict))
         , heartbeatTimer(ioContext)
         , heartbeatTimeout(ioContext)
