@@ -1,5 +1,5 @@
-#ifndef PITAYA_COMMUNICATION_PACKET_FRAMED_H
-#define PITAYA_COMMUNICATION_PACKET_FRAMED_H
+#ifndef PITAYA_COMMUNICATION_PACKET_STREAM_H
+#define PITAYA_COMMUNICATION_PACKET_STREAM_H
 
 #include "pitaya/protocol/packet.h"
 #include <boost/system/error_code.hpp>
@@ -9,7 +9,7 @@
 namespace pitaya {
 namespace connection {
 
-class PacketFramed
+class PacketStream
 {
 public:
     using SendHandler = std::function<void(boost::system::error_code)>;
@@ -17,7 +17,7 @@ public:
         std::function<void(boost::system::error_code, std::vector<protocol::Packet> packet)>;
     using ConnectHandler = std::function<void(boost::system::error_code)>;
 
-    virtual ~PacketFramed() = default;
+    virtual ~PacketStream() = default;
     virtual void SendPacket(protocol::Packet packet, SendHandler handler) = 0;
     virtual void ReceivePackets(ReceiveHandler handler) = 0;
     virtual void Connect(const std::string& host,
@@ -29,4 +29,4 @@ public:
 } // namespace connection
 } // namespace pitaya
 
-#endif // PITAYA_COMMUNICATION_PACKET_FRAMED_H
+#endif // PITAYA_COMMUNICATION_PACKET_STREAM_H

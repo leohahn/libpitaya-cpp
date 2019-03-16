@@ -1,5 +1,5 @@
 #include "pitaya/connection.h"
-#include "connection/tcp_packet_framed.h"
+#include "connection/tcp_packet_stream.h"
 #include "logger.h"
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
@@ -29,7 +29,7 @@ Connection::Connection()
     : _state(Inited())
     , _ioContext(std::make_shared<asio::io_context>())
     , _work(std::make_shared<asio::io_context::work>(*_ioContext))
-    , _packetFramed(new TcpPacketFramed(_ioContext, TcpPacketFramed::ReadBufferMaxSize{ 2048 }))
+    , _packetStream(new TcpPacketStream(_ioContext, TcpPacketStream::ReadBufferMaxSize{ 2048 }))
     , _workerThread(&Connection::StartWorkerThread, this)
 {}
 
@@ -56,6 +56,9 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
         // If the state is not connected, it means that the request cannot be sent, therefore
         // just call the handler with an error.
         if (!_state.IsConnected()) {
+            // TODO: consider doing like libpitaya, where if the connection is not in the connected
+            // state, it will store the request in a queue and retry when the conenction was
+            // finished.
             RequestError err;
             err.code = "PIT-RESET";
             err.message = "Cannot send request, connection is not in the connected state";
@@ -68,7 +71,7 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
         LOG(Debug) << "Sending request for route " << route;
 
         auto packet = protocol::NewData(std::move(data));
-        _packetFramed->SendPacket(packet, [handler = std::move(handler)](error_code ec) {
+        _packetStream->SendPacket(packet, [handler = std::move(handler)](error_code ec) {
             if (ec) {
                 LOG(Error) << "Failed to send request: " << ec.message();
                 RequestError err;
@@ -103,7 +106,7 @@ Connection::Start(const std::string& address)
     LOG(Debug) << "Will connect to host " << host << " in port " << port;
 
     try {
-        _packetFramed->Connect(host, port, [this, host, port](error_code ec) {
+        _packetStream->Connect(host, port, [this, host, port](error_code ec) {
             assert(std::this_thread::get_id() == this->_workerThreadId);
 
             if (ec) {
@@ -142,7 +145,7 @@ Connection::SendHandshake()
     std::vector<uint8_t> handshakeBuf;
     handshakePacket.SerializeInto(handshakeBuf);
 
-    _packetFramed->SendPacket(std::move(handshakePacket), [this](error_code ec) {
+    _packetStream->SendPacket(std::move(handshakePacket), [this](error_code ec) {
         if (ec) {
             HandshakeFailed(ec);
             return;
@@ -159,7 +162,7 @@ Connection::ReceiveHandshakeResponse()
 
     LOG(Debug) << "Will receive handshake response";
 
-    _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
+    _packetStream->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
         if (ec) {
             HandshakeFailed(ec);
             return;
@@ -260,7 +263,7 @@ Connection::SendHandshakeAck(string handshakeResponse)
 
     auto heartbeatInterval = std::chrono::seconds(doc["sys"]["heartbeat"].GetUint64());
 
-    _packetFramed->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval, routeDict = std::move(routeDict)](error_code ec) {
+    _packetStream->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval, routeDict = std::move(routeDict)](error_code ec) {
         if (ec) {
             LOG(Error) << "Failed to send hanshake ack";
             return;
@@ -284,7 +287,7 @@ Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::uno
                             std::move(heartbeatInterval),
                             std::move(routeDict),
                             [this]() {
-                                _packetFramed->SendPacket(protocol::NewHeartbeat(),
+                                _packetStream->SendPacket(protocol::NewHeartbeat(),
                                                           [this](error_code ec) {
                                                               if (ec) {
                                                                   ConnectionError(ec);
@@ -321,7 +324,7 @@ Connection::ConnectionError(error_code ec)
         LOG(Error) << "Error in connection: " << ec.message();
         _state.SetInited();
         _eventListeners.Broadcast(Event::ConnectionError, ec.message());
-        _packetFramed->Disconnect();
+        _packetStream->Disconnect();
     }
 }
 
@@ -332,14 +335,14 @@ Connection::KickedFromServer()
     if (_state.IsConnected()) {
         _state.SetInited();
         _eventListeners.Broadcast(Event::Kicked, "Kicked from server");
-        _packetFramed->Disconnect();
+        _packetStream->Disconnect();
     }
 }
 
 void
 Connection::ReceivePackets()
 {
-    _packetFramed->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
+    _packetStream->ReceivePackets([this](error_code ec, std::vector<protocol::Packet> packets) {
         if (ec) {
             ConnectionError(ec);
             return;

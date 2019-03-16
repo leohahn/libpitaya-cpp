@@ -1,7 +1,7 @@
-#ifndef PITAYA_CONNECTION_TCP_PACKET_FRAMED_H
-#define PITAYA_CONNECTION_TCP_PACKET_FRAMED_H
+#ifndef PITAYA_CONNECTION_TCP_PACKET_STREAM_H
+#define PITAYA_CONNECTION_TCP_PACKET_STREAM_H
 
-#include "pitaya/connection/packet_framed.h"
+#include "pitaya/connection/packet_stream.h"
 #include <array>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -14,7 +14,7 @@
 namespace pitaya {
 namespace connection {
 
-class TcpPacketFramed : public PacketFramed
+class TcpPacketStream : public PacketStream
 {
 public:
     struct ReadBufferMaxSize
@@ -29,7 +29,7 @@ public:
         size_t _val;
     };
 
-    TcpPacketFramed(std::shared_ptr<boost::asio::io_context> ioContext,
+    TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
                     ReadBufferMaxSize readBufferMaxSize);
 
     void SendPacket(protocol::Packet packet, SendHandler handler) override;
@@ -38,8 +38,8 @@ public:
     void Disconnect() override;
 
     // We cannot copy a TcpPacketFramed object.
-    TcpPacketFramed& operator=(const TcpPacketFramed&) = delete;
-    TcpPacketFramed(const TcpPacketFramed&) = delete;
+    TcpPacketStream& operator=(const TcpPacketStream&) = delete;
+    TcpPacketStream(const TcpPacketStream&) = delete;
 
 private:
     void SendNextPacket(SendHandler handler);
@@ -63,4 +63,4 @@ private:
 } // namespace connection
 } // namespace pitaya
 
-#endif // PITAYA_CONNECTION_TCP_PACKET_FRAMED_H
+#endif // PITAYA_CONNECTION_TCP_PACKET_STREAM_H

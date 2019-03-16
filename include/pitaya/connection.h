@@ -2,7 +2,7 @@
 #define PITAYA_CONNECTION_H
 
 #include "pitaya/connection/event.h"
-#include "pitaya/connection/packet_framed.h"
+#include "pitaya/connection/packet_stream.h"
 #include "pitaya/connection/state.h"
 #include "pitaya/protocol/packet.h"
 #include <boost/asio/ip/tcp.hpp>
@@ -13,6 +13,7 @@
 #include <thread>
 #include <functional>
 #include <unordered_map>
+#include <queue>
 
 namespace pitaya {
 namespace connection {
@@ -70,7 +71,7 @@ private:
     std::shared_ptr<boost::asio::io_context::work> _work;
 
     // Interface that allows sending and receiving packets.
-    std::unique_ptr<PacketFramed> _packetFramed;
+    std::unique_ptr<PacketStream> _packetStream;
 
     // Thread that will execute all of the io tasks.
     std::thread _workerThread;

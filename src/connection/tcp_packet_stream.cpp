@@ -1,4 +1,4 @@
-#include "connection/tcp_packet_framed.h"
+#include "connection/tcp_packet_stream.h"
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
 #include <algorithm>
@@ -20,7 +20,7 @@ namespace connection {
 
 static constexpr int kMaxQueuedPackets = 50;
 
-TcpPacketFramed::TcpPacketFramed(std::shared_ptr<boost::asio::io_context> ioContext,
+TcpPacketStream::TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
                                  ReadBufferMaxSize readBufferMaxSize)
     : _ioContext(std::move(ioContext))
     , _socket(*_ioContext)
@@ -29,11 +29,11 @@ TcpPacketFramed::TcpPacketFramed(std::shared_ptr<boost::asio::io_context> ioCont
     , _readBufferHead(0)
 {
     _readBuffer.resize(_readBufferMaxSize(), 0);
-    LOG(Debug) << "TCP Packet Framed created";
+    LOG(Debug) << "TCP Packet Stream created";
 }
 
 void
-TcpPacketFramed::Connect(const std::string& host, const std::string& port, ConnectHandler handler)
+TcpPacketStream::Connect(const std::string& host, const std::string& port, ConnectHandler handler)
 {
     tcp::resolver resolver(*_ioContext);
 
@@ -57,7 +57,7 @@ TcpPacketFramed::Connect(const std::string& host, const std::string& port, Conne
 }
 
 void
-TcpPacketFramed::Disconnect()
+TcpPacketStream::Disconnect()
 {
     try {
         _socket.shutdown(tcp::socket::shutdown_both);
@@ -69,7 +69,7 @@ TcpPacketFramed::Disconnect()
 }
 
 void
-TcpPacketFramed::SendPacket(protocol::Packet packet, SendHandler handler)
+TcpPacketStream::SendPacket(protocol::Packet packet, SendHandler handler)
 {
     if (_packetSendQueue.size() < kMaxQueuedPackets) {
         _packetSendQueue.push_back(std::move(packet));
@@ -80,13 +80,13 @@ TcpPacketFramed::SendPacket(protocol::Packet packet, SendHandler handler)
 }
 
 void
-TcpPacketFramed::ReceivePackets(ReceiveHandler handler)
+TcpPacketStream::ReceivePackets(ReceiveHandler handler)
 {
     ReadToBuffer(std::move(handler));
 }
 
 void
-TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
+TcpPacketStream::ReadToBuffer(ReceiveHandler handler)
 {
     void* bufferStart =
         reinterpret_cast<void*>(reinterpret_cast<char*>(&_readBuffer[0]) + _readBufferHead);
@@ -123,7 +123,7 @@ TcpPacketFramed::ReadToBuffer(ReceiveHandler handler)
 }
 
 void
-TcpPacketFramed::SendNextPacket(SendHandler handler)
+TcpPacketStream::SendNextPacket(SendHandler handler)
 {
     assert(!_packetSendQueue.empty());
 
@@ -157,7 +157,7 @@ TcpPacketFramed::SendNextPacket(SendHandler handler)
 }
 
 vector<protocol::Packet>
-TcpPacketFramed::ParsePacketsFromReadBuffer()
+TcpPacketStream::ParsePacketsFromReadBuffer()
 {
     // When this function is called, _readBufferHead points to the first
     // position that does not contain a valid byte.

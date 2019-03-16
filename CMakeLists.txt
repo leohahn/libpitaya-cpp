@@ -28,8 +28,9 @@ add_library(pitaya_cpp
     include/pitaya/connection/state.h
     src/connection/state.cpp
     # Connection
-    include/pitaya/connection/packet_framed.h
-    src/connection/tcp_packet_framed.cpp
+    include/pitaya/connection/packet_stream.h
+    src/connection/tcp_packet_stream.h
+    src/connection/tcp_packet_stream.cpp
     include/pitaya/connection/error.h
     src/connection/error.cpp
     # Logging
