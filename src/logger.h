@@ -37,7 +37,7 @@ public:
         time_t t = std::time(NULL);
         (void)std::strftime(timeBuf, kMaxSizeForTime, "[%Y-%m-%d %H:%M:%S] ", localtime(&t));
 
-        _oss << LogLevelNames[level] << timeBuf << function << "(" << line << "): ";
+        _oss << timeBuf << LogLevelNames[level] << function << "(" << line << "): ";
     }
 
     ~StreamLogger() { std::cout << _oss.str() << "\n"; }
