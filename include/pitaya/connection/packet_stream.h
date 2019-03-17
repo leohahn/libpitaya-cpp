@@ -2,6 +2,7 @@
 #define PITAYA_COMMUNICATION_PACKET_STREAM_H
 
 #include "pitaya/protocol/packet.h"
+
 #include <boost/system/error_code.hpp>
 #include <string>
 #include <vector>

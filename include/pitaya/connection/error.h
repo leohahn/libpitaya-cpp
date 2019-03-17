@@ -14,6 +14,7 @@ enum class ConnectionError
     HeartbeatTimeout,
     InvalidHeartbeatJson,
     InvalidHandshakeCompression,
+    InvalidMessage,
 };
 
 class ErrorCategory : public boost::system::error_category

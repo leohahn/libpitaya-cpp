@@ -1,10 +1,12 @@
 #include "connection/tcp_packet_stream.h"
+
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
+
+#include "logger.h"
 #include <algorithm>
 #include <boost/asio.hpp>
 #include <iostream>
-#include "logger.h"
 
 namespace asio = boost::asio;
 using tcp = boost::asio::ip::tcp;
@@ -65,7 +67,8 @@ TcpPacketStream::Disconnect()
         // NOTE(lhahn): Boost throws an error if the socket was already shutdown.
         // We just ignore it and continue execution normally.
     }
-    if (_socket.is_open()) _socket.close();
+    if (_socket.is_open())
+        _socket.close();
 }
 
 void

@@ -26,8 +26,10 @@ struct Connected
 {
     std::chrono::seconds heartbeatInterval;
     std::chrono::seconds heartbeatTimeoutSeconds;
+    std::string serializer;
 
-    std::unordered_map<std::string, int> routeDict;
+    std::unordered_map<std::string, int> routeToCode;
+    std::unordered_map<int, std::string> codeToRoute;
     boost::asio::steady_timer heartbeatTimer;
     boost::asio::system_timer heartbeatTimeout;
     std::function<void()> heartbeatTick;
@@ -35,15 +37,21 @@ struct Connected
     Connected(boost::asio::io_context& ioContext,
               std::chrono::seconds heartbeatInterval,
               std::chrono::seconds heartbeatTimeoutSeconds,
-              std::unordered_map<std::string, int> routeDict,
+              std::string serializer,
+              std::unordered_map<std::string, int> routeToCode,
               std::function<void()> heartbeatTick)
         : heartbeatInterval(heartbeatInterval)
         , heartbeatTimeoutSeconds(heartbeatTimeoutSeconds)
-        , routeDict(std::move(routeDict))
+        , serializer(std::move(serializer))
+        , routeToCode(std::move(routeToCode))
         , heartbeatTimer(ioContext)
         , heartbeatTimeout(ioContext)
         , heartbeatTick(std::move(heartbeatTick))
-    {}
+    {
+        for (const auto& pair : this->routeToCode) {
+            codeToRoute.insert(std::make_pair(pair.second, pair.first));
+        }
+    }
 };
 
 class State
@@ -60,7 +68,8 @@ public:
     void SetInited();
     void SetConnected(boost::asio::io_context& ioContext,
                       std::chrono::seconds heartbeatInterval,
-                      std::unordered_map<std::string, int> routeDict,
+                      std::string serializer,
+                      std::unordered_map<std::string, int> routeToCode,
                       std::function<void()> heartbeatTick,
                       std::function<void()> heartbeatTimeoutCb);
 

@@ -4,35 +4,28 @@
 #include "pitaya/connection/event.h"
 #include "pitaya/connection/packet_stream.h"
 #include "pitaya/connection/state.h"
+#include "pitaya/protocol/message.h"
 #include "pitaya/protocol/packet.h"
+#include "pitaya/protocol/request.h"
+
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/variant.hpp>
-#include <memory>
 #include <chrono>
+#include <functional>
+#include <memory>
+#include <queue>
 #include <string>
 #include <thread>
-#include <functional>
 #include <unordered_map>
-#include <queue>
 
 namespace pitaya {
 namespace connection {
 
-struct RequestError
-{
-    std::string code;
-    std::string message;
-    std::string metadata;
-};
-
-using RequestData = std::vector<uint8_t>;
-using RequestResult = boost::variant<RequestData, RequestError>;
-using RequestHandler = std::function<void(RequestResult)>;
+using RequestHandler = std::function<void(protocol::RequestStatus, protocol::RequestData)>;
 
 class Connection
 {
 public:
-
     Connection();
     ~Connection();
 
@@ -50,15 +43,17 @@ public:
 
 private:
     void StartWorkerThread();
-    void TcpConnectionDone();
     void SendHandshake();
     void ConnectionError(boost::system::error_code ec);
     void HandshakeFailed(boost::system::error_code ec);
-    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval, std::unordered_map<std::string, int> routeDict);
+    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
+                             std::string serializer,
+                             std::unordered_map<std::string, int> routeToCode);
     void ReceiveHandshakeResponse();
     void SendHandshakeAck(std::string handshakeResponse);
     void ReceivePackets();
     void ProcessPacket(const protocol::Packet& packet);
+    void ProcessMessage(const protocol::Message& msg);
     void KickedFromServer();
 
 private:
@@ -82,6 +77,10 @@ private:
     // Listeners that will be notified when events happen in the
     // connection.
     EventListeners _eventListeners;
+
+    // This map keeps track of all of the requests that were sent to the
+    // server but did not yet received a response from it.
+    std::unordered_map<uint64_t, RequestHandler> _inFlightRequests;
 };
 
 } // namespace connection

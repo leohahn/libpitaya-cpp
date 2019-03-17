@@ -1,9 +1,10 @@
 #include "pitaya/connection.h"
-#include "pitaya/protocol/message.h"
-#include "connection/tcp_packet_stream.h"
-#include "logger.h"
+
 #include "pitaya/connection/error.h"
 #include "pitaya/exception.h"
+
+#include "connection/tcp_packet_stream.h"
+#include "logger.h"
 #include "utils/gzip.h"
 #include "utils/net.h"
 #include <assert.h>
@@ -48,9 +49,11 @@ Connection::~Connection()
     }
 }
 
-void 
+void
 Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, RequestHandler handler)
 {
+    using namespace pitaya::protocol;
+
     LOG(Debug) << "Posting request for route " << route;
 
     _ioContext->post([this, route, data = std::move(data), handler = std::move(handler)]() {
@@ -60,10 +63,7 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
             // TODO: consider doing like libpitaya, where if the connection is not in the connected
             // state, it will store the request in a queue and retry when the conenction was
             // finished.
-            RequestError err;
-            err.code = "PIT-RESET";
-            err.message = "Cannot send request, connection is not in the connected state";
-            handler(std::move(err));
+            handler(RequestStatus::NotConnectedError, RequestData());
             return;
         }
 
@@ -75,21 +75,24 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
         LOG(Debug) << "Sending request for route " << route;
 
         // TODO: is this the best way to handle request id's?
-        auto msg = protocol::Message::NewRequest(_reqId++, route, std::move(data));
-        auto packet = protocol::NewData(msg, ptr->routeDict);
+        auto msg = Message::NewRequest(_reqId++, route, std::move(data));
+        auto packet = NewData(msg, ptr->routeToCode);
 
-        _packetStream->SendPacket(packet, [handler = std::move(handler)](error_code ec) {
-            if (ec) {
-                LOG(Error) << "Failed to send request: " << ec.message();
-                RequestError err;
-                err.code = "PIT-500";
-                err.message = ec.message();
-                handler(std::move(err));
-                return;
-            }
+        _packetStream->SendPacket(
+            packet, [this, msg = std::move(msg), handler = std::move(handler)](error_code ec) {
+                if (ec) {
+                    LOG(Error) << "Failed to send request: " << ec.message();
+                    handler(RequestStatus::InternalError, RequestData());
+                    return;
+                }
 
-            LOG(Debug) << "Request successfully sent!";
-        });
+                LOG(Debug) << "Request successfully sent!";
+
+                assert(_inFlightRequests.find(msg.id) == _inFlightRequests.end() &&
+                       "The request id should be unique");
+
+                _inFlightRequests.insert(std::make_pair(msg.id, std::move(handler)));
+            });
     });
 }
 
@@ -113,6 +116,9 @@ Connection::Start(const std::string& address)
     LOG(Debug) << "Will connect to host " << host << " in port " << port;
 
     try {
+        // FIXME, TODO: The packet stream should not only do a raw tcp connection,
+        // but instead do a fully Pitaya connection. This implementation detail should be
+        // handled by the packet stream and not the connection itself.
         _packetStream->Connect(host, port, [this, host, port](error_code ec) {
             assert(std::this_thread::get_id() == this->_workerThreadId);
 
@@ -122,20 +128,11 @@ Connection::Start(const std::string& address)
             }
 
             LOG(Debug) << "Connected to endpoint: " << host << ":" << port;
-            TcpConnectionDone();
+            SendHandshake();
         });
     } catch (const system_error& exc) {
         throw Exception("Error starting the connection: " + string(exc.what()));
     }
-}
-
-void
-Connection::TcpConnectionDone()
-{
-    assert(std::this_thread::get_id() == _workerThreadId);
-    // The client is connected to the server, now start the
-    // pitaya protocol (handshake).
-    SendHandshake();
 }
 
 void
@@ -157,7 +154,6 @@ Connection::SendHandshake()
             HandshakeFailed(ec);
             return;
         }
-
         ReceiveHandshakeResponse();
     });
 }
@@ -251,6 +247,16 @@ Connection::SendHandshakeAck(string handshakeResponse)
         return;
     }
 
+    std::string serializer;
+
+    if (!doc["sys"].HasMember("serializer") || !doc["sys"]["serializer"].IsString()) {
+        LOG(Warn) << "Did not receive serializer from server, assuming JSON";
+        serializer = "json";
+    } else {
+        serializer = doc["sys"]["serializer"].GetString();
+        LOG(Info) << "Using serializer: " << serializer;
+    }
+
     std::unordered_map<std::string, int> routeDict;
 
     if (doc["sys"].HasMember("dict") && doc["sys"]["dict"].IsObject()) {
@@ -270,20 +276,23 @@ Connection::SendHandshakeAck(string handshakeResponse)
 
     auto heartbeatInterval = std::chrono::seconds(doc["sys"]["heartbeat"].GetUint64());
 
-    _packetStream->SendPacket(protocol::NewHandshakeAck(), [this, heartbeatInterval, routeDict = std::move(routeDict)](error_code ec) {
-        if (ec) {
-            LOG(Error) << "Failed to send hanshake ack";
-            return;
-        }
+    _packetStream->SendPacket(
+        protocol::NewHandshakeAck(),
+        [this, heartbeatInterval, serializer, routeDict = std::move(routeDict)](error_code ec) {
+            if (ec) {
+                LOG(Error) << "Failed to send hanshake ack";
+                return;
+            }
 
-        LOG(Debug) << "Sent handshake ack successfuly";
+            LOG(Debug) << "Sent handshake ack successfuly";
 
-        HandshakeSuccessful(heartbeatInterval, routeDict);
-    });
+            HandshakeSuccessful(heartbeatInterval, std::move(serializer), std::move(routeDict));
+        });
 }
 
 void
 Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
+                                std::string serializer,
                                 std::unordered_map<std::string, int> routeDict)
 {
     LOG(Debug) << "Heartbeat Interval is " << heartbeatInterval.count() << " seconds";
@@ -293,6 +302,7 @@ Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
         std::lock_guard<decltype(_state)> lock(_state);
         _state.SetConnected(*this->_ioContext,
                             std::move(heartbeatInterval),
+                            std::move(serializer),
                             std::move(routeDict),
                             [this]() {
                                 LOG(Debug) << "New tick, sending heartbeat!";
@@ -357,7 +367,8 @@ Connection::ReceivePackets()
             return;
         }
 
-        // TODO: remove this assertion
+        // TODO: remove this assertion. First we need to figure out if receiving more than one
+        // packet is even possible.
         assert(packets.size() == 1);
 
         for (const auto& p : packets) {
@@ -376,9 +387,31 @@ Connection::ProcessPacket(const protocol::Packet& packet)
             LOG(Debug) << "Received heartbeat from server";
             _state.ExtendHeartbeatTimeout();
             break;
-        case protocol::PacketType::Data:
-            LOG(Debug) << "Ignoring data packet for the moment (FIX THIS)";
+        case protocol::PacketType::Data: {
+            LOG(Debug) << "Received data packet from server";
+
+            if (!_state.IsConnected()) {
+                ConnectionError(ConnectionError::WrongPacket);
+                return;
+            }
+
+            auto connectedState = boost::get<Connected>(&_state.Val());
+            assert(connectedState);
+
+            auto maybeMsg =
+                protocol::Message::Deserialize(packet.body, connectedState->codeToRoute);
+
+            if (!maybeMsg) {
+                LOG(Error) << "Received an invalid message from the server";
+                ConnectionError(ConnectionError::InvalidMessage);
+                return;
+            }
+
+            const auto& msg = maybeMsg.value();
+
+            ProcessMessage(std::move(msg));
             break;
+        }
         case protocol::PacketType::Kick:
             // Expected
             KickedFromServer();
@@ -386,6 +419,49 @@ Connection::ProcessPacket(const protocol::Packet& packet)
         default:
             assert(false && "Should not receive packets other than heartbeat, data and kick");
             ConnectionError(ConnectionError::WrongPacket);
+            break;
+    }
+}
+
+void
+Connection::ProcessMessage(const protocol::Message& msg)
+{
+    using namespace pitaya::protocol;
+
+    switch (msg.type) {
+        case MessageType::Response: {
+            // We got a response from a request that was sent earlier,
+            // therefore we need to get the request id and match it against the callback
+            // passed to the client.
+
+            LOG(Info) << "Processing response message...";
+
+            if (_inFlightRequests.find(msg.id) == _inFlightRequests.end()) {
+                LOG(Error) << "Received a response from the server from a request id " << msg.id
+                           << " that was not sent, ignoring it";
+                return;
+            }
+
+            auto requestHandler = std::move(_inFlightRequests.at(msg.id));
+            _inFlightRequests.erase(msg.id);
+
+            if (msg.error) {
+                requestHandler(RequestStatus::ServerError, std::move(msg.data));
+            } else {
+                requestHandler(RequestStatus::Ok, std::move(msg.data));
+            }
+
+            break;
+        }
+        case MessageType::Push:
+            break;
+        case MessageType::Request:
+            // The client should not receive request messages, just log it and ignore it.
+            LOG(Warn) << "Received a request message from the server, ignoring...";
+            break;
+        case MessageType::Notify:
+            // The client should not receive notify messages, just log it and ignore it.
+            LOG(Warn) << "Received a notify message from the server, ignoring...";
             break;
     }
 }

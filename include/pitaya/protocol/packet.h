@@ -3,6 +3,7 @@
 
 #include "pitaya/exception.h"
 #include "pitaya/protocol/message.h"
+
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
 #include <ostream>

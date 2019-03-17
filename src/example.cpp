@@ -1,6 +1,7 @@
-#include "logger.h"
 #include "pitaya.h"
 #include "pitaya/exception.h"
+
+#include "logger.h"
 #include <array>
 #include <boost/asio.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -15,6 +16,8 @@
 namespace asio = boost::asio;
 using tcp = boost::asio::ip::tcp;
 using error_code = boost::system::error_code;
+using namespace pitaya::connection;
+using namespace pitaya::protocol;
 
 using std::cerr;
 using std::cout;
@@ -50,12 +53,13 @@ main()
     Semaphore semaphore;
 
     const char* address = "localhost:4100";
-    // const char* address = "a1d127034f31611e8858512b1bea90da-838011280.us-east-1.elb.amazonaws.com:3251";
+    // const char* address =
+    // "a1d127034f31611e8858512b1bea90da-838011280.us-east-1.elb.amazonaws.com:3251";
 
     try {
         pitaya::Client client;
         client.Connect(address);
-        client.AddEventListener([&semaphore](pitaya::connection::Event ev, const std::string& msg) {
+        client.AddEventListener([&semaphore](Event ev, const std::string& msg) {
             LOG(Info) << "===> Got event: (" << ev << ") => " << msg;
 
             if (ev == pitaya::connection::Event::Connected) {
@@ -65,20 +69,14 @@ main()
 
         semaphore.Wait();
 
-        client.Request("connector.getsessiondata", [](pitaya::connection::RequestResult result) {
-            auto err = boost::get<pitaya::connection::RequestError>(&result);
-            if (err) {
-                LOG(Error) << "Request failed: code = " << err->code
-                           << ", message = " << err->message;
+        client.Request("connector.getsessiondata", [](RequestStatus status, RequestData data) {
+            if (status != RequestStatus::Ok) {
+                LOG(Error) << "Request failed: status = " << status;
                 return;
             }
 
-            auto data = boost::get<pitaya::connection::RequestData>(&result);
-            assert(data != nullptr);
-            if (data) {
-                LOG(Info) << "Received data from server: "
-                          << std::string((char*)data->data(), data->size());
-            }
+            LOG(Info) << "Received data from server: "
+                      << std::string((char*)data.data(), data.size());
         });
     } catch (const pitaya::Exception& exc) {
         LOG(Error) << "Failed: " << exc.what();

@@ -21,6 +21,7 @@ add_library(pitaya_cpp
     src/protocol/packet.cpp
     include/pitaya/protocol/message.h
     src/protocol/message.cpp
+    include/pitaya/protocol/request.h
     # Connection
     include/pitaya/connection.h
     src/connection.cpp
@@ -37,7 +38,6 @@ add_library(pitaya_cpp
     src/connection/error.cpp
     # Logging
     src/logger.h
-    src/logger.cpp
     )
 
 target_compile_options(pitaya_cpp PRIVATE -Wall)

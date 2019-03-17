@@ -2,9 +2,9 @@
 #define PITAYA_PROTOCOL_MESSAGE_H
 
 #include <boost/optional.hpp>
-#include <vector>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace pitaya {
 namespace protocol {
@@ -16,6 +16,7 @@ static constexpr int kMessageRouteCompressionMask = 1;
 static constexpr int kMessageRouteLengthMask = 255;
 
 static constexpr int kMessageFlagSize = 1;
+static constexpr int kMessageHeaderLength = 2;
 
 enum class MessageType : uint8_t
 {
@@ -34,7 +35,12 @@ struct Message
     bool error;
 
     static Message NewRequest(size_t id, std::string route, std::vector<uint8_t> data);
-    void SerializeInto(std::vector<uint8_t>& buf, const std::unordered_map<std::string, int>& routeDict) const;
+    void SerializeInto(std::vector<uint8_t>& buf,
+                       const std::unordered_map<std::string, int>& routeToCode) const;
+
+    static boost::optional<Message> Deserialize(
+        const std::vector<uint8_t>& buf,
+        const std::unordered_map<int, std::string>& codeToRoute);
 };
 
 } // namespace protocol
