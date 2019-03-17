@@ -14,6 +14,7 @@ static constexpr int kMessageGzipMask = 16;
 static constexpr int kMessageTypeMask = 7;
 static constexpr int kMessageRouteCompressionMask = 1;
 static constexpr int kMessageRouteLengthMask = 255;
+static constexpr int kNotifyMessageId = 0;
 
 static constexpr int kMessageFlagSize = 1;
 static constexpr int kMessageHeaderLength = 2;

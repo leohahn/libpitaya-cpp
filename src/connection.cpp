@@ -28,7 +28,8 @@ namespace pitaya {
 namespace connection {
 
 Connection::Connection()
-    : _state(Inited())
+    : _reqId(1)
+    , _state(Inited())
     , _ioContext(std::make_shared<asio::io_context>())
     , _work(std::make_shared<asio::io_context::work>(*_ioContext))
     , _packetStream(new TcpPacketStream(_ioContext, TcpPacketStream::ReadBufferMaxSize{ 2048 }))
@@ -54,8 +55,6 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
 {
     using namespace pitaya::protocol;
 
-    LOG(Debug) << "Posting request for route " << route;
-
     _ioContext->post([this, route, data = std::move(data), handler = std::move(handler)]() {
         // If the state is not connected, it means that the request cannot be sent, therefore
         // just call the handler with an error.
@@ -63,6 +62,7 @@ Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, Req
             // TODO: consider doing like libpitaya, where if the connection is not in the connected
             // state, it will store the request in a queue and retry when the conenction was
             // finished.
+            LOG(Warn) << "Cannot post request, since the connection is not established yet";
             handler(RequestStatus::NotConnectedError, RequestData());
             return;
         }
@@ -264,6 +264,8 @@ Connection::SendHandshakeAck(string handshakeResponse)
         }
     }
 
+    // NOTE: Print the route dict for debugging purposes. Should this be kept for
+    // production code?
     if (!routeDict.empty()) {
         LOG(Debug) << "Route dict:";
         for (const auto& r : routeDict) {
@@ -281,8 +283,9 @@ Connection::SendHandshakeAck(string handshakeResponse)
                 return;
             }
 
-            LOG(Debug) << "Sent handshake ack successfuly";
+            LOG(Debug) << "Sent handshake ack successfuly, pitaya connected!";
 
+            // The pitaya connection was finished! Now start receiving packets from the server.
             StartReceivingPackets(heartbeatInterval, std::move(serializer), std::move(routeDict));
         });
 }
@@ -363,6 +366,8 @@ Connection::ReceivePackets()
             ConnectionError(ec);
             return;
         }
+
+        LOG(Debug) << "Received " << packets.size() << " packets from the server";
 
         // TODO: remove this assertion. First we need to figure out if receiving more than one
         // packet is even possible.
