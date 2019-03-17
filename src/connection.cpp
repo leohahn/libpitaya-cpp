@@ -116,9 +116,6 @@ Connection::Start(const std::string& address)
     LOG(Debug) << "Will connect to host " << host << " in port " << port;
 
     try {
-        // FIXME, TODO: The packet stream should not only do a raw tcp connection,
-        // but instead do a fully Pitaya connection. This implementation detail should be
-        // handled by the packet stream and not the connection itself.
         _packetStream->Connect(host, port, [this, host, port](error_code ec) {
             assert(std::this_thread::get_id() == this->_workerThreadId);
 
@@ -286,14 +283,14 @@ Connection::SendHandshakeAck(string handshakeResponse)
 
             LOG(Debug) << "Sent handshake ack successfuly";
 
-            HandshakeSuccessful(heartbeatInterval, std::move(serializer), std::move(routeDict));
+            StartReceivingPackets(heartbeatInterval, std::move(serializer), std::move(routeDict));
         });
 }
 
 void
-Connection::HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
-                                std::string serializer,
-                                std::unordered_map<std::string, int> routeDict)
+Connection::StartReceivingPackets(std::chrono::seconds heartbeatInterval,
+                                  std::string serializer,
+                                  std::unordered_map<std::string, int> routeDict)
 {
     LOG(Debug) << "Heartbeat Interval is " << heartbeatInterval.count() << " seconds";
 

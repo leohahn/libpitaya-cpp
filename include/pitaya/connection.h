@@ -46,9 +46,9 @@ private:
     void SendHandshake();
     void ConnectionError(boost::system::error_code ec);
     void HandshakeFailed(boost::system::error_code ec);
-    void HandshakeSuccessful(std::chrono::seconds heartbeatInterval,
-                             std::string serializer,
-                             std::unordered_map<std::string, int> routeToCode);
+    void StartReceivingPackets(std::chrono::seconds heartbeatInterval,
+                               std::string serializer,
+                               std::unordered_map<std::string, int> routeToCode);
     void ReceiveHandshakeResponse();
     void SendHandshakeAck(std::string handshakeResponse);
     void ReceivePackets();
