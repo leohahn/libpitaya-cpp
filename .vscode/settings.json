@@ -14,4 +14,7 @@
         "variant": "cpp",
         "algorithm": "cpp"
     }
+        "algorithm": "cpp",
+        "iosfwd": "cpp"
+    "editor.formatOnSave": true,
 }
