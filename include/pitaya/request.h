@@ -1,11 +1,13 @@
-#ifndef PITAYA_PROTOCOL_REQUEST_H
-#define PITAYA_PROTOCOL_REQUEST_H
+#ifndef PITAYA_REQUEST_H
+#define PITAYA_REQUEST_H
 
+#include <boost/asio/system_timer.hpp>
+#include <chrono>
+#include <functional>
 #include <ostream>
 #include <vector>
 
 namespace pitaya {
-namespace protocol {
 
 using RequestData = std::vector<uint8_t>;
 
@@ -17,6 +19,35 @@ enum class RequestStatus
     Reset,
     InternalError,
     NotConnectedError,
+};
+
+using RequestHandler = std::function<void(RequestStatus, RequestData)>;
+
+struct Request
+{
+    RequestHandler handler;
+    boost::asio::system_timer timeout;
+
+    Request(boost::asio::io_context& ioContext,
+            RequestHandler handler,
+            std::chrono::seconds timeoutSeconds,
+            std::function<void(boost::system::error_code)> onTimeout)
+        : handler(std::move(handler))
+        , timeout(ioContext)
+    {
+        timeout.expires_after(timeoutSeconds);
+        timeout.async_wait(std::move(onTimeout));
+    }
+
+    Request(const Request&) = delete;
+    Request& operator=(const Request&) = delete;
+
+    Request& operator=(Request&& req)
+    {
+        handler = std::move(req.handler);
+        timeout = std::move(req.timeout);
+        return *this;
+    }
 };
 
 inline std::ostream&
@@ -44,7 +75,6 @@ operator<<(std::ostream& os, RequestStatus s)
     }
 }
 
-} // namespace protocol
 } // namespace pitaya
 
 #endif // PITAYA_PROTOCOL_REQUEST_H

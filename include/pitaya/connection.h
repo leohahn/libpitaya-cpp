@@ -6,7 +6,7 @@
 #include "pitaya/connection/state.h"
 #include "pitaya/protocol/message.h"
 #include "pitaya/protocol/packet.h"
-#include "pitaya/protocol/request.h"
+#include "pitaya/request.h"
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/variant.hpp>
@@ -21,8 +21,6 @@
 namespace pitaya {
 namespace connection {
 
-using RequestHandler = std::function<void(protocol::RequestStatus, protocol::RequestData)>;
-
 class Connection
 {
 public:
@@ -36,7 +34,10 @@ public:
         _eventListeners.Add(std::move(listener));
     }
 
-    void PostRequest(const std::string& route, std::vector<uint8_t> data, RequestHandler handler);
+    void PostRequest(const std::string& route,
+                     std::vector<uint8_t> data,
+                     std::chrono::seconds timeout,
+                     RequestHandler handler);
     // We cannot copy a Connection object.
     Connection& operator=(const Connection&) = delete;
     Connection(const Connection&) = delete;
@@ -55,6 +56,7 @@ private:
     void ProcessPacket(const protocol::Packet& packet);
     void ProcessMessage(const protocol::Message& msg);
     void KickedFromServer();
+    void ProcessRequestTimeout(uint64_t id);
 
 private:
     size_t _reqId;
@@ -80,7 +82,7 @@ private:
 
     // This map keeps track of all of the requests that were sent to the
     // server but did not yet received a response from it.
-    std::unordered_map<uint64_t, RequestHandler> _inFlightRequests;
+    std::unordered_map<uint64_t, Request> _inFlightRequests;
 };
 
 } // namespace connection

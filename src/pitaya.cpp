@@ -23,17 +23,18 @@ Client::AddEventListener(connection::Listener listener)
 }
 
 void
-Client::Request(const std::string& route, connection::RequestHandler handler)
+Client::Request(const std::string& route, std::chrono::seconds timeout, RequestHandler handler)
 {
-    _connection.PostRequest(route, std::vector<uint8_t>(), std::move(handler));
+    _connection.PostRequest(route, std::vector<uint8_t>(), timeout, std::move(handler));
 }
 
 void
 Client::Request(const std::string& route,
                 std::vector<uint8_t> data,
-                connection::RequestHandler handler)
+                std::chrono::seconds timeout,
+                RequestHandler handler)
 {
-    _connection.PostRequest(route, std::move(data), std::move(handler));
+    _connection.PostRequest(route, std::move(data), timeout, std::move(handler));
 }
 
 } // namespace pitaya

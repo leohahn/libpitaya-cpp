@@ -14,21 +14,21 @@ find_package(Threads REQUIRED)
 add_library(pitaya_cpp
     include/pitaya.h
     include/pitaya/exception.h
-    include/pitaya/connection/event.h
+    include/pitaya/request.h
     src/pitaya.cpp
     # Protocol
     include/pitaya/protocol/packet.h
     src/protocol/packet.cpp
     include/pitaya/protocol/message.h
     src/protocol/message.cpp
-    include/pitaya/protocol/request.h
     # Connection
     include/pitaya/connection.h
+    include/pitaya/connection/event.h
+    include/pitaya/connection/state.h
     src/connection.cpp
     src/utils/net.h
     src/utils/gzip.h
     src/utils/gzip.cpp
-    include/pitaya/connection/state.h
     src/connection/state.cpp
     # Connection
     include/pitaya/connection/packet_stream.h
@@ -40,7 +40,7 @@ add_library(pitaya_cpp
     src/logger.h
     )
 
-target_compile_options(pitaya_cpp PRIVATE -Wall)
+target_compile_options(pitaya_cpp PRIVATE -Wall -Werror)
 
 target_include_directories(pitaya_cpp
     PUBLIC include

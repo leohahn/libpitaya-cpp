@@ -51,49 +51,72 @@ Connection::~Connection()
 }
 
 void
-Connection::PostRequest(const std::string& route, std::vector<uint8_t> data, RequestHandler handler)
+Connection::PostRequest(const std::string& route,
+                        std::vector<uint8_t> data,
+                        std::chrono::seconds timeout,
+                        RequestHandler handler)
 {
     using namespace pitaya::protocol;
 
-    _ioContext->post([this, route, data = std::move(data), handler = std::move(handler)]() {
-        // If the state is not connected, it means that the request cannot be sent, therefore
-        // just call the handler with an error.
-        if (!_state.IsConnected()) {
-            // TODO: consider doing like libpitaya, where if the connection is not in the connected
-            // state, it will store the request in a queue and retry when the conenction was
-            // finished.
-            LOG(Warn) << "Cannot post request, since the connection is not established yet";
-            handler(RequestStatus::NotConnectedError, RequestData());
-            return;
-        }
+    _ioContext->post(
+        [this, route, timeout, data = std::move(data), handler = std::move(handler)]() {
+            // If the state is not connected, it means that the request cannot be sent, therefore
+            // just call the handler with an error.
+            if (!_state.IsConnected()) {
+                // TODO: consider doing like libpitaya, where if the connection is not in the
+                // connected state, it will store the request in a queue and retry when the
+                // conenction was finished.
+                LOG(Warn) << "Cannot post request, since the connection is not established yet";
+                handler(RequestStatus::NotConnectedError, RequestData());
+                return;
+            }
 
-        auto* ptr = boost::get<Connected>(&_state.Val());
-        assert(ptr);
+            auto* ptr = boost::get<Connected>(&_state.Val());
+            assert(ptr);
 
-        assert(std::this_thread::get_id() == _workerThreadId);
+            assert(std::this_thread::get_id() == _workerThreadId);
 
-        LOG(Debug) << "Sending request for route " << route;
+            LOG(Debug) << "Sending request for route " << route;
 
-        // TODO: is this the best way to handle request id's?
-        auto msg = Message::NewRequest(_reqId++, route, std::move(data));
-        auto packet = NewData(msg, ptr->routeToCode);
+            // TODO: is this the best way to handle request id's?
+            auto msg = Message::NewRequest(_reqId++, route, std::move(data));
+            auto packet = NewData(msg, ptr->routeToCode);
 
-        _packetStream->SendPacket(
-            packet, [this, msg = std::move(msg), handler = std::move(handler)](error_code ec) {
-                if (ec) {
-                    LOG(Error) << "Failed to send request: " << ec.message();
-                    handler(RequestStatus::InternalError, RequestData());
-                    return;
-                }
+            _packetStream->SendPacket(
+                packet,
+                [this, timeout, msg = std::move(msg), handler = std::move(handler)](error_code ec) {
+                    if (ec) {
+                        LOG(Error) << "Failed to send request: " << ec.message();
+                        handler(RequestStatus::InternalError, RequestData());
+                        return;
+                    }
 
-                LOG(Debug) << "Request successfully sent!";
+                    LOG(Debug) << "Request successfully sent!";
 
-                assert(_inFlightRequests.find(msg.id) == _inFlightRequests.end() &&
-                       "The request id should be unique");
+                    assert(_inFlightRequests.find(msg.id) == _inFlightRequests.end() &&
+                           "The request id should be unique");
 
-                _inFlightRequests.insert(std::make_pair(msg.id, std::move(handler)));
-            });
-    });
+                    _inFlightRequests.emplace(
+                        std::piecewise_construct,
+                        std::forward_as_tuple(msg.id),
+                        std::forward_as_tuple(*_ioContext,
+                                              std::move(handler),
+                                              timeout,
+                                              [this, id = msg.id](error_code ec) {
+                                                  if (ec) {
+                                                      LOG(Warn) << "Request timeout timer failed: "
+                                                                << ec.message();
+                                                      return;
+                                                  }
+
+                                                  LOG(Warn) << "Request id " << id << " timed out";
+
+                                                  ProcessRequestTimeout(id);
+                                              }));
+
+                    // Now, start the request timeout
+                });
+        });
 }
 
 void
@@ -444,14 +467,15 @@ Connection::ProcessMessage(const protocol::Message& msg)
                 return;
             }
 
-            auto requestHandler = std::move(_inFlightRequests.at(msg.id));
-            _inFlightRequests.erase(msg.id);
+            const auto& request = _inFlightRequests.at(msg.id);
 
             if (msg.error) {
-                requestHandler(RequestStatus::ServerError, std::move(msg.data));
+                request.handler(RequestStatus::ServerError, std::move(msg.data));
             } else {
-                requestHandler(RequestStatus::Ok, std::move(msg.data));
+                request.handler(RequestStatus::Ok, std::move(msg.data));
             }
+
+            _inFlightRequests.erase(msg.id);
 
             break;
         }
@@ -466,6 +490,20 @@ Connection::ProcessMessage(const protocol::Message& msg)
             LOG(Warn) << "Received a notify message from the server, ignoring...";
             break;
     }
+}
+
+void
+Connection::ProcessRequestTimeout(uint64_t id)
+{
+    if (_inFlightRequests.find(id) == _inFlightRequests.end()) {
+        LOG(Warn) << "Tried to process timeout of request id " << id
+                  << ", however the same is not in flight";
+        return;
+    }
+
+    const auto& req = _inFlightRequests.at(id);
+    req.handler(RequestStatus::Timeout, RequestData());
+    _inFlightRequests.erase(id);
 }
 
 void
