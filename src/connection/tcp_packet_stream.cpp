@@ -24,8 +24,16 @@ static constexpr int kMaxQueuedPackets = 50;
 
 TcpPacketStream::TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
                                  ReadBufferMaxSize readBufferMaxSize)
+    : TcpPacketStream(ioContext,
+                      readBufferMaxSize,
+                      std::unique_ptr<TcpSocket>(new AsioTcpSocket(*ioContext)))
+{}
+
+TcpPacketStream::TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
+                                 ReadBufferMaxSize readBufferMaxSize,
+                                 std::unique_ptr<TcpSocket> socket)
     : _ioContext(std::move(ioContext))
-    , _socket(*_ioContext)
+    , _socket(std::move(socket))
     , _writeId(0)
     , _readBufferMaxSize(readBufferMaxSize)
     , _readBufferHead(0)
@@ -42,15 +50,15 @@ TcpPacketStream::Connect(const std::string& host, const std::string& port, Conne
     try {
         auto endpointIterator = resolver.resolve({ host, port });
 
-        asio::async_connect(
-            _socket,
+        _socket->Connect(
             endpointIterator,
-            [handler = std::move(handler)](error_code ec, tcp::endpoint endpoint) {
+            [handler = std::move(handler)](const error_code& ec, tcp::resolver::iterator it) {
                 if (ec) {
                     handler(ec);
                     return;
                 }
 
+                LOG(Debug) << "Raw TCP connection done to " << it->host_name();
                 handler(boost::system::errc::make_error_code(boost::system::errc::success));
             });
     } catch (const system_error& exc) {
@@ -61,14 +69,8 @@ TcpPacketStream::Connect(const std::string& host, const std::string& port, Conne
 void
 TcpPacketStream::Disconnect()
 {
-    try {
-        _socket.shutdown(tcp::socket::shutdown_both);
-    } catch (const boost::exception& exc) {
-        // NOTE(lhahn): Boost throws an error if the socket was already shutdown.
-        // We just ignore it and continue execution normally.
-    }
-    if (_socket.is_open())
-        _socket.close();
+    _socket->Shutdown();
+    _socket->Close();
 }
 
 void
@@ -95,8 +97,8 @@ TcpPacketStream::ReadToBuffer(ReceiveHandler handler)
         reinterpret_cast<void*>(reinterpret_cast<char*>(&_readBuffer[0]) + _readBufferHead);
     size_t bufferSize = _readBuffer.size() - _readBufferHead;
 
-    _socket.async_receive(
-        asio::buffer(bufferStart, bufferSize), [this, handler](error_code ec, size_t bytesRead) {
+    _socket->Receive(
+        bufferStart, bufferSize, [this, handler](const error_code& ec, size_t bytesRead) {
             if (ec) {
                 // If an error occured, behave as if no bytes were read.
                 // TODO: Broadcast error to client.
@@ -142,17 +144,16 @@ TcpPacketStream::SendNextPacket(SendHandler handler)
     pkt.SerializeInto(buf);
 
     // Send buffer asynchronously
-    _socket.async_send(
-        asio::buffer(buf), [this, id, h = std::move(handler)](error_code ec, size_t nwritten) {
-            if (ec) {
-                std::cerr << "Failed to send buffer to server: " << ec.message() << "\n";
-                h(ec);
-                return;
-            }
+    _socket->Send(buf, [this, id, h = std::move(handler)](const error_code& ec, size_t nwritten) {
+        if (ec) {
+            std::cerr << "Failed to send buffer to server: " << ec.message() << "\n";
+            h(ec);
+            return;
+        }
 
-            h(boost_errc::make_error_code(boost_errc::success));
-            this->_writeBuffers.erase(id);
-        });
+        h(boost_errc::make_error_code(boost_errc::success));
+        this->_writeBuffers.erase(id);
+    });
 
     // Put the buffer into the write set.
     assert(_writeBuffers.find(_writeId) == _writeBuffers.end());

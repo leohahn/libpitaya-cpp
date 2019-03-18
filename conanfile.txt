@@ -2,6 +2,7 @@
 boost_asio/1.66.0@bincrafters/stable
 rapidjson/1.1.0@bincrafters/stable
 zlib/1.2.11@conan/stable
+gtest/1.8.1@bincrafters/stable
 
 [generators]
 cmake

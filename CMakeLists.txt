@@ -38,7 +38,9 @@ add_library(pitaya_cpp
     src/connection/error.cpp
     # Logging
     src/logger.h
-    )
+    # Socket
+    include/pitaya/tcp_socket.h
+    src/tcp_socket.cpp)
 
 target_compile_options(pitaya_cpp PRIVATE -Wall -Werror)
 
@@ -67,3 +69,22 @@ set_target_properties(example
     PROPERTIES CXX_STANDARD 14)
 
 target_link_libraries(example PRIVATE pitaya_cpp)
+
+#=========================================
+# Tests
+#=========================================
+include(CTest)
+option(BUILD_TESTING "" ON)
+if(BUILD_TESTING AND NOT IOS AND NOT ANDROID)
+    add_executable(pitaya_tests
+        test/main.cpp
+        test/tcp_packet_stream_test.cpp)
+
+    set_target_properties(pitaya_tests
+      PROPERTIES
+        CXX_STANDARD 14
+        OUTPUT_NAME tests)
+
+    target_include_directories(pitaya_tests PUBLIC src include) 
+    target_link_libraries(pitaya_tests PRIVATE CONAN_PKG::gtest pitaya_cpp)
+endif()

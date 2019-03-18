@@ -2,6 +2,8 @@
 #define PITAYA_CONNECTION_TCP_PACKET_STREAM_H
 
 #include "pitaya/connection/packet_stream.h"
+#include "pitaya/tcp_socket.h"
+
 #include <array>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -31,6 +33,10 @@ public:
     TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
                     ReadBufferMaxSize readBufferMaxSize);
 
+    TcpPacketStream(std::shared_ptr<boost::asio::io_context> ioContext,
+                    ReadBufferMaxSize readBufferMaxSize,
+                    std::unique_ptr<TcpSocket> socket);
+
     void SendPacket(protocol::Packet packet, SendHandler handler) override;
     void ReceivePackets(ReceiveHandler handler) override;
     void Connect(const std::string& host, const std::string& port, ConnectHandler handler) override;
@@ -48,8 +54,8 @@ private:
 private:
     std::shared_ptr<boost::asio::io_context> _ioContext;
 
-    // The raw tcp socket
-    boost::asio::ip::tcp::socket _socket;
+    // TODO: change the name to just _socket.
+    std::unique_ptr<TcpSocket> _socket;
 
     std::deque<protocol::Packet> _packetSendQueue;
     std::unordered_map<uint32_t, std::vector<uint8_t>> _writeBuffers;
