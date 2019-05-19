@@ -1,5 +1,4 @@
-#ifndef PITAYA_PROTOCOL_MESSAGE_H
-#define PITAYA_PROTOCOL_MESSAGE_H
+#pragma once
 
 #include <boost/optional.hpp>
 #include <string>
@@ -30,12 +29,12 @@ enum class MessageType : uint8_t
 struct Message
 {
     MessageType type;
-    uint32_t id;
+    uint64_t id;
     std::string route;
     std::vector<uint8_t> data;
     bool error;
 
-    static Message NewRequest(size_t id, std::string route, std::vector<uint8_t> data);
+    static Message NewRequest(uint64_t id, std::string route, std::vector<uint8_t> data);
     void SerializeInto(std::vector<uint8_t>& buf,
                        const std::unordered_map<std::string, int>& routeToCode) const;
 
@@ -46,5 +45,3 @@ struct Message
 
 } // namespace protocol
 } // namespace pitaya
-
-#endif // PITAYA_PROTOCOL_MESSAGE_H

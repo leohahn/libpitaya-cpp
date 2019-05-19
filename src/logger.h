@@ -34,7 +34,7 @@ public:
         const int kMaxSizeForTime = 32;
         char timeBuf[34];
 
-        time_t t = std::time(NULL);
+        time_t t = std::time(nullptr);
         (void)std::strftime(timeBuf, kMaxSizeForTime, "[%Y-%m-%d %H:%M:%S] ", localtime(&t));
 
         _oss << timeBuf << LogLevelNames[level] << function << "(" << line << "): ";

@@ -509,8 +509,9 @@ Connection::ProcessRequestTimeout(uint64_t id)
 void
 Connection::StartWorkerThread()
 {
-    _workerThreadId = std::this_thread::get_id();
     LOG(Info) << "Running worker thread";
+    _workerThreadId = std::this_thread::get_id();
+    LOG(Info) << "Running on thread id " << _workerThreadId;
     _ioContext->run();
     LOG(Info) << "No more work to do, exiting thread";
 }

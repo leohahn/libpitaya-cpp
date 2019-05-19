@@ -92,7 +92,7 @@ Compress(uint8_t** output, size_t* output_size, uint8_t* data, size_t size)
         do {
             ret = deflate(&strm, flush);
             while (ret == Z_BUF_ERROR) { // buffer too small, must realloc it
-                long offset = strm.next_out - *output;
+                int64_t offset = strm.next_out - *output;
                 strm.avail_out += CHUNK;
                 *output_size += CHUNK;
                 *output = (unsigned char*)realloc(*output, *output_size);

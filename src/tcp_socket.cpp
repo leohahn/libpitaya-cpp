@@ -23,6 +23,7 @@ AsioTcpSocket::Shutdown()
     } catch (const boost::exception& exc) {
         // NOTE(lhahn): Boost throws an error if the socket was already shutdown.
         // We just ignore it and continue execution normally.
+        (void)exc;
     }
 }
 

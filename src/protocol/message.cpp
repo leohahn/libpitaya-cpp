@@ -15,7 +15,7 @@ IsMessageTypeRoutable(MessageType type)
 }
 
 Message
-Message::NewRequest(size_t id, std::string route, std::vector<uint8_t> data)
+Message::NewRequest(uint64_t id, std::string route, std::vector<uint8_t> data)
 {
     Message message = {};
     message.type = MessageType::Request;

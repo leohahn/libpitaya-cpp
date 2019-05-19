@@ -72,6 +72,9 @@ operator<<(std::ostream& os, RequestStatus s)
         case RequestStatus::NotConnectedError:
             os << "NotConnectedError";
             return os;
+        default:
+            assert(false);
+            return os;
     }
 }
 

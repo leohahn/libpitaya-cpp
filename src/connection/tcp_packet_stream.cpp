@@ -62,7 +62,7 @@ TcpPacketStream::Connect(const std::string& host, const std::string& port, Conne
                 handler(boost::system::errc::make_error_code(boost::system::errc::success));
             });
     } catch (const system_error& exc) {
-        throw Exception("Error resolving host " + host);
+        throw Exception("Error resolving host " + host + ": " + exc.what());
     }
 }
 

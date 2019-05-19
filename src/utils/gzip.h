@@ -1,7 +1,6 @@
-#ifndef PITAYA_UTILS_GZIP_H
-#define PITAYA_UTILS_GZIP_H
+#pragma once
 
-#include <cstdlib>
+#include <cstdint>
 
 namespace pitaya {
 namespace utils {
@@ -14,5 +13,3 @@ int Compress(uint8_t** output, size_t* output_size, uint8_t* data, size_t size);
 
 } // namespace utils
 } // namespace pitaya
-
-#endif // PITAYA_UTILS_GZIP_H

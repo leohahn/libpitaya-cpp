@@ -42,7 +42,15 @@ add_library(pitaya_cpp
     include/pitaya/tcp_socket.h
     src/tcp_socket.cpp)
 
-target_compile_options(pitaya_cpp PRIVATE -Wall -Werror)
+if(MSVC)
+    target_compile_options(pitaya_cpp PRIVATE /WX /MD)
+    target_compile_definitions(pitaya_cpp
+      PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+	-D_ITERATOR_DEBUG_LEVEL=0)
+else()
+    target_compile_options(pitaya_cpp PRIVATE -Wall -Werror)
+endif()
 
 target_include_directories(pitaya_cpp
     PUBLIC include
@@ -67,6 +75,14 @@ add_executable(example
 
 set_target_properties(example
     PROPERTIES CXX_STANDARD 14)
+
+if(MSVC)
+    target_compile_options(example PRIVATE /MD)
+    target_compile_definitions(example
+      PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+	-D_ITERATOR_DEBUG_LEVEL=0)
+endif()
 
 target_link_libraries(example PRIVATE pitaya_cpp)
 
